@@ -1,0 +1,27 @@
+{
+  "routes": [
+    { "path": "/", "title": "Learner dashboard" },
+    { "path": "/auth", "title": "Sign in or create account" },
+    { "path": "/assessments", "title": "Assessments" },
+    { "path": "/attempts/:attemptId", "title": "Assessment attempt" },
+    { "path": "/attempts/:attemptId/results", "title": "Assessment results" },
+    { "path": "/diagnosis", "title": "Diagnosis and misconceptions" },
+    { "path": "/learning-hub", "title": "Learning hub" },
+    { "path": "/learning-hub/concepts", "title": "Concept learning hub" },
+    { "path": "/learning-hub/explanations", "title": "Personalized explanations" },
+    { "path": "/tutor", "title": "AI tutor" },
+    { "path": "/practice", "title": "Practice" },
+    { "path": "/study-plan", "title": "Study plan" },
+    { "path": "/progress", "title": "Progress and mastery" },
+    { "path": "/reports", "title": "Assessment reports" },
+    { "path": "/teacher", "title": "Teacher dashboard" },
+    { "path": "/teacher/classes", "title": "Classes and rosters" },
+    { "path": "/teacher/students", "title": "Student insights" },
+    { "path": "/teacher/assessments", "title": "Assessment management" },
+    { "path": "/teacher/analytics", "title": "Analytics and mastery" },
+    { "path": "/teacher/misconceptions", "title": "Misconception heatmap" },
+    { "path": "/teacher/practice-allocator", "title": "Practice allocator" },
+    { "path": "/teacher/teaching-insights", "title": "Teaching insights" },
+    { "path": "/teacher/reports", "title": "Teacher reports and transcripts" }
+  ]
+}
