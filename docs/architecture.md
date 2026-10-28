@@ -1,36 +1,43 @@
 # EduDrishti architecture
 
-## Current Stage 1 database foundation
+## Current foundation
 
-Supabase Auth remains the identity provider. `public.profiles.user_id` is a one-to-one foreign key to `auth.users.id`; an `auth.users` insert trigger creates a profile with the `student` role. Signup metadata is used only for a bounded display name. Any submitted `role` or `app_role` field is ignored.
+EduDrishti uses Supabase Auth and PostgreSQL. The initial learning domain is Class 10 Mathematics, beginning with Quadratic Equations. Stage 2 adds a database-backed diagnostic assessment engine; it does not yet include the Stitch student/teacher UI, AI diagnosis generation, or adaptive practice orchestration.
 
-A trusted project operator provisions a teacher by updating `public.profiles.app_role` through the Supabase SQL Editor or another protected administrative path. Authenticated clients have update permission only for `display_name`; they cannot insert profiles or modify the role. There is no self-service teacher promotion flow.
+## Identity and roles
+
+`public.profiles.user_id` is a one-to-one foreign key to `auth.users.id`. An Auth insert trigger creates every profile as `student` and ignores role claims in mutable user metadata. A trusted operator provisions teachers; authenticated clients may update only their display name and cannot promote themselves. Class ownership and enrollment are set through scoped database functions using `auth.uid()`.
 
 ## Data model
 
-- `profiles` stores the application role and display name, not a duplicate email address.
-- `classes` belongs to one teacher. `enrollments` is the class/student join table and carries enrollment status and provenance.
-- `topics` stores subject, grade level, concept code, parent relationship, and metadata. A published Class 10 Mathematics `quadratic-equations` topic is seeded as public educational metadata.
-- `questions` stores question text and options. `question_answer_keys` separately stores correct answers, grading configuration, and rationale so student question access cannot expose solutions.
-- `assessments` belongs to a class. `assessment_questions` records each question's order and points.
-- `assessment_attempts` belongs to a student and assessment. `responses` references the attempt and an actual question in that assessment; score fields are database constrained and writable only by trusted server-side code.
-- `diagnoses` is tied to an assessment attempt and topic, keeping the evidence within the same student/class access boundary.
-- `learning_sessions` and dated `progress_records` use the class/student enrollment relationship. Progress observations are append-oriented rather than overwriting one mutable mastery value.
+- `profiles` stores application role and display name, not a duplicate email address.
+- `classes` belongs to one teacher. `enrollments` records class/student membership, status, and trusted provenance.
+- `topics` stores subject, grade, concept code, hierarchy, and metadata. Published Class 10 Mathematics `quadratic-equations` metadata is seeded.
+- `questions` stores prompt, type, answer options, topic, difficulty (1–5), concept, and content source. `question_answer_keys` stores correct-answer configuration separately. `question_guidance` stores explanations and misconception tags separately from student-readable question rows.
+- `assessments` and `assessment_questions` define class assignments or explicitly marked development templates, ordered questions, and positive point weights.
+- `assessment_attempts` belongs to one student and assessment. `responses` records submitted answers, timestamps, answered state, correctness, score percentage, points earned, and feedback.
+- `diagnoses`, `learning_sessions`, and dated `progress_records` remain distinct protected learner records. Stage 2 does not generate diagnoses or synthetic performance data.
 
-The migration uses UUID keys, foreign keys, unique and check constraints, timestamps, and indexes for the expected ownership and reporting paths. It includes no report table; reports are derived from attempts, responses, diagnoses, sessions, and progress under the same RLS checks.
+Schema changes are versioned in `supabase/migrations/`. Tables use UUID primary keys, foreign keys, checks, unique constraints, timestamps, and indexes. Exposed public tables use RLS and explicit grants.
 
-## Authorization boundary
+## Assessment flow and scoring boundary
 
-All tables in the exposed `public` schema have RLS enabled. Grants are revoked from `PUBLIC`, `anon`, and `authenticated` first, then re-granted narrowly. The only unauthenticated read is for published topic metadata. Student reads are scoped to their own profiles, enrollments, attempts, responses, diagnoses, sessions, and progress. Teachers can read records only for classes they own and students linked to those classes. Class creation and enrollment use scoped database functions that derive the teacher identity from `auth.uid()` instead of trusting a client-supplied owner.
+Authenticated students retrieve available assessments and question content through database RPCs. The browser does not receive answer keys, explanations, or misconception tags before completion. A published seven-item Quadratic Equations assessment is labeled `development_fixture` and can be taken by authenticated student profiles without inventing a teacher or class. Teacher-created assessments remain scoped to the teacher's own class and its active enrollments.
 
-Students cannot write score, diagnosis, session, or progress fields directly. Assessment start, response save, and submission functions check the current student and assessment membership. Trusted Edge Functions or other server-side code using a server-only service credential remain responsible for grading and AI-derived records. Never expose a service-role key to the frontend.
+Students start through `public.start_assessment`, save strict JSON answers through `public.save_response`, and complete through `public.complete_assessment`. These server-side database functions check identity, role, assessment access, attempt ownership/state, question membership, and answer shape. They calculate correctness and points from protected answer keys; client-supplied scores are never accepted. Multiple-choice questions are all-or-nothing; numeric tolerance is stored server-side; normalized short-text matching is exact against accepted answers. Unanswered items are recorded at completion and earn zero. Completion is idempotent, and a completed student can intentionally start another numbered attempt.
 
-Helper functions live in the non-API `private` schema, use a fixed empty `search_path`, and are `SECURITY DEFINER` only where needed to evaluate related-row authorization without recursive RLS. The local Supabase API config exposes only `public` and `graphql_public`.
+`public.get_student_results` returns a versioned summary only to the student who owns a graded attempt. It then includes item correctness, points, correct answers, explanations, and misconception tags. Teacher reads remain bounded by owned classes and enrolled students through the existing RLS rules; template attempts have no class owner and are visible only to their student.
+
+## Authorization and API boundaries
+
+All public application tables have RLS enabled. Grants are revoked from `PUBLIC`, `anon`, and `authenticated` before a narrow allowlist is applied. The only unauthenticated read is published topic metadata. Students can access only their own private learner records. Teachers can access only their owned classes and their enrolled students. Students cannot write attempt, response, score, guidance, answer-key, diagnosis, session, or progress records directly.
+
+The `private` schema is not exposed by the Supabase Data API. Authorization helpers use a fixed empty `search_path`; `SECURITY DEFINER` is used only for scoped database checks and RPCs. Never expose the Supabase service-role key in browser code.
 
 ## Frontend and AI integration
 
-When Google Stitch source is supplied, inspect its framework before integration. The browser should use the Supabase URL and publishable/anon key. It should call the scoped database functions for class creation/enrollment and assessment participation. Grading, Gemini requests, diagnosis generation, and writes to score/progress data belong in authenticated Edge Functions. Validate identity, resource ownership, request sizes, and output schemas on the server.
+When the Google Stitch source is supplied, inspect its framework before integration. Browser code should use the Supabase URL and publishable/anon key and call the documented RPCs in [assessment-engine.md](assessment-engine.md). Grading remains inside the database. Gemini requests, AI-generated diagnoses, and writes to downstream progress belong in trusted server-side code with strict input/output validation and server-only AI credentials.
 
 ## Student-data readiness
 
-Use synthetic learner data during development. Before production student data is processed, define applicable consent, privacy, retention/deletion, and incident-response requirements. Class owner deletion and data retention need an explicit lifecycle workflow before self-service deletion is added.
+Use synthetic learner data during development. The seeded assessment/questions are educational fixtures, not learner records. Before production student data is processed, define applicable consent, privacy, retention/deletion, and incident-response requirements. Class-owner deletion and retention need an explicit lifecycle workflow before self-service deletion is added.

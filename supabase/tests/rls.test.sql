@@ -2,7 +2,7 @@
 -- This fixture is transaction-scoped and rolls back all Auth users and records.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(57) LIMIT 1;
+SELECT extensions.plan(86) LIMIT 1;
 
 -- Stable synthetic identities are safe because all fixture writes roll back.
 INSERT INTO auth.users (
@@ -76,6 +76,11 @@ SELECT extensions.lives_ok(
     'question author can store a separate private answer key'
 ) LIMIT 1;
 SELECT extensions.lives_ok(
+    $$INSERT INTO public.question_guidance (question_id, explanation, misconception_tags)
+      VALUES ('30000000-0000-0000-0000-000000000001', 'The exponent two identifies a quadratic.', ARRAY['degree_confusion'])$$,
+    'question author can store protected explanation and misconception guidance'
+) LIMIT 1;
+SELECT extensions.lives_ok(
     $$INSERT INTO public.assessments (id, class_id, created_by_teacher_id, title, assessment_type)
       VALUES ('40000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001',
         '10000000-0000-0000-0000-000000000010', 'Quadratics Diagnostic A', 'diagnostic')$$,
@@ -110,6 +115,11 @@ SELECT extensions.lives_ok(
     $$INSERT INTO public.question_answer_keys (question_id, answer_config)
       VALUES ('30000000-0000-0000-0000-000000000002', '{"value":2}'::jsonb)$$,
     'second teacher can store its own answer key'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$INSERT INTO public.question_guidance (question_id, explanation, misconception_tags)
+      VALUES ('30000000-0000-0000-0000-000000000002', 'The roots are 2 and -2; the positive root is 2.', ARRAY['root_selection_error'])$$,
+    'second teacher can create guidance for its own question'
 ) LIMIT 1;
 SELECT extensions.lives_ok(
     $$INSERT INTO public.assessments (id, class_id, created_by_teacher_id, title, assessment_type)
@@ -174,6 +184,50 @@ SELECT extensions.is(
     0::bigint,
     'student cannot read any answer key'
 ) LIMIT 1;
+SELECT extensions.is(
+    (SELECT pg_catalog.count(*) FROM public.question_guidance LIMIT 1),
+    0::bigint,
+    'student cannot read explanations or misconception guidance directly'
+) LIMIT 1;
+SELECT extensions.ok(
+    public.list_available_assessments() @> '[{"assessment_id":"d3000000-0000-4000-8000-000000000001","is_template":true}]'::jsonb,
+    'student can list the authenticated development diagnostic template'
+) LIMIT 1;
+SELECT extensions.ok(
+    NOT ((public.get_assessment('d3000000-0000-4000-8000-000000000001'::uuid)->'questions'->0) ? 'correct_answer')
+    AND NOT ((public.get_assessment('d3000000-0000-4000-8000-000000000001'::uuid)->'questions'->0) ? 'explanation')
+    AND NOT ((public.get_assessment('d3000000-0000-4000-8000-000000000001'::uuid)->'questions'->0) ? 'misconception_tags'),
+    'assessment retrieval does not disclose keys or post-submit guidance'
+) LIMIT 1;
+SELECT extensions.is(
+    public.start_assessment('d3000000-0000-4000-8000-000000000001'::uuid),
+    public.start_assessment('d3000000-0000-4000-8000-000000000001'::uuid),
+    'repeated start returns the same active template attempt'
+) LIMIT 1;
+SELECT extensions.throws_ok(
+    $$SELECT public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1)) LIMIT 1$$,
+    '55000', NULL, 'student cannot retrieve results before completion'
+) LIMIT 1;
+SELECT extensions.throws_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000001', '{"selected_option":"Z"}'::jsonb
+    ) LIMIT 1$$,
+    '22023', NULL, 'answer option must exist in the selected question'
+) LIMIT 1;
+SELECT extensions.throws_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '{"value":1}'::jsonb
+    ) LIMIT 1$$,
+    '22023', NULL, 'question id must belong to the active assessment'
+) LIMIT 1;
 SELECT extensions.lives_ok(
     $$SELECT public.start_assessment('40000000-0000-0000-0000-000000000001') LIMIT 1$$,
     'enrolled student can start assigned published assessment'
@@ -211,6 +265,175 @@ SELECT extensions.lives_ok(
         '30000000-0000-0000-0000-000000000001', '{"selected_option":"b"}'::jsonb
     ) LIMIT 1$$,
     'student can save an answer only for own active attempt and assigned question'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$SELECT public.submit_assessment((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = '40000000-0000-0000-0000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))$$,
+    'legacy submit RPC delegates to deterministic server grading'
+) LIMIT 1;
+SELECT extensions.is(
+    (SELECT aa.status FROM public.assessment_attempts AS aa
+     WHERE aa.assessment_id = '40000000-0000-0000-0000-000000000001'
+       AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+    'graded'::text,
+    'legacy submit records a completed graded state'
+) LIMIT 1;
+SELECT extensions.is(
+    (SELECT aa.score_percent FROM public.assessment_attempts AS aa
+     WHERE aa.assessment_id = '40000000-0000-0000-0000-000000000001'
+       AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+    100::numeric,
+    'score is computed on the server from the stored answer key'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000001', '{"selected_option":"B"}'::jsonb
+    ) LIMIT 1$$,
+    'student can submit a valid single-choice answer'
+) LIMIT 1;
+SELECT extensions.is(
+    public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000001', '{"selected_option":"B"}'::jsonb
+    ),
+    public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000001', '{"selected_option":"B"}'::jsonb
+    ),
+    'duplicate answer saves update the same response row'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000002', '{"selected_option":"B"}'::jsonb
+    ) LIMIT 1$$,
+    'wrong but well-formed choice can be saved for server scoring'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000003', '{"selected_options":["D","A"]}'::jsonb
+    ) LIMIT 1$$,
+    'multiple-choice answer accepts valid option sets independent of order'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000004', '{"value":1}'::jsonb
+    ) LIMIT 1$$,
+    'numeric answer accepts a JSON number'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000005', '{"value":1.5005}'::jsonb
+    ) LIMIT 1$$,
+    'numeric answer within the configured server tolerance is accepted'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000006', '{"value":" X^2 - 5X + 6 = 0 "}'::jsonb
+    ) LIMIT 1$$,
+    'short-text comparison normalizes case and whitespace'
+) LIMIT 1;
+SELECT extensions.is(
+    (SELECT pg_catalog.count(*) FROM public.responses AS r
+     JOIN public.assessment_attempts AS aa ON aa.id = r.attempt_id
+     WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+       AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1),
+    6::bigint,
+    'valid duplicate saves persist one row per answered question'
+) LIMIT 1;
+SELECT extensions.ok(
+    public.complete_assessment((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))
+      @> '{"attempt":{"status":"graded","score_percent":71.43},"summary":{"earned_points":5,"total_points":7,"correct_count":5,"incorrect_count":1,"unanswered_count":1}}'::jsonb,
+    'server grades five correct, one incorrect, and one unanswered item deterministically'
+) LIMIT 1;
+SELECT extensions.ok(
+    (public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))->'items'->2->>'is_correct') = 'true'
+    AND (public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))->'items'->4->>'is_correct') = 'true'
+    AND (public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))->'items'->5->>'is_correct') = 'true',
+    'multiple-choice set scoring, numeric tolerance, and normalized text are graded correctly'
+) LIMIT 1;
+SELECT extensions.ok(
+    (public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))->'items'->6->>'is_answered') = 'false'
+    AND (public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))->'items'->6->>'points_earned')::numeric = 0,
+    'incomplete attempt records omitted question as unanswered and awards zero points'
+) LIMIT 1;
+SELECT extensions.ok(
+    (public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))->'items'->0) ? 'correct_answer'
+    AND (public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1))->'items'->0) ? 'explanation',
+    'completed result reveals the correct answer and explanation to its owner'
+) LIMIT 1;
+SELECT extensions.is(
+    public.complete_assessment((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1)),
+    public.get_student_results((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001' LIMIT 1)),
+    'repeated completion returns the persisted identical result summary'
+) LIMIT 1;
+SELECT extensions.ok(
+    public.start_assessment('d3000000-0000-4000-8000-000000000001'::uuid)
+      <> (SELECT aa.id FROM public.assessment_attempts AS aa
+          WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+            AND aa.student_id = '10000000-0000-0000-0000-000000000001'
+            AND aa.attempt_number = 1 LIMIT 1),
+    'student can intentionally start a new attempt after completion'
+) LIMIT 1;
+SELECT extensions.lives_ok(
+    $$SELECT public.save_response(
+      (SELECT aa.id FROM public.assessment_attempts AS aa
+       WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+         AND aa.student_id = '10000000-0000-0000-0000-000000000001'
+         AND aa.status = 'in_progress' LIMIT 1),
+      'd2000000-0000-4000-8000-000000000003', '{"selected_options":["A"]}'::jsonb
+    ) LIMIT 1$$,
+    'a well-formed but incomplete multiple-choice answer is retained for grading'
+) LIMIT 1;
+SELECT extensions.ok(
+    public.complete_assessment((SELECT aa.id FROM public.assessment_attempts AS aa
+      WHERE aa.assessment_id = 'd3000000-0000-4000-8000-000000000001'
+        AND aa.student_id = '10000000-0000-0000-0000-000000000001'
+        AND aa.status = 'in_progress' LIMIT 1))
+      @> '{"summary":{"earned_points":0,"correct_count":0,"incorrect_count":1,"unanswered_count":6}}'::jsonb,
+    'multiple-choice partial selections receive no partial credit and blanks remain unanswered'
 ) LIMIT 1;
 SELECT extensions.lives_ok(
     $$UPDATE public.profiles SET display_name = 'Student A Updated'
@@ -282,6 +505,10 @@ SELECT extensions.is(
     (SELECT pg_catalog.count(*) FROM public.responses WHERE attempt_id = '50000000-0000-0000-0000-000000000002' LIMIT 1),
     0::bigint,
     'student cannot read another student response'
+) LIMIT 1;
+SELECT extensions.throws_ok(
+    $$SELECT public.get_student_results('50000000-0000-0000-0000-000000000002'::uuid) LIMIT 1$$,
+    '42501', NULL, 'results RPC denies another student attempt'
 ) LIMIT 1;
 SELECT extensions.is(
     (SELECT pg_catalog.count(*) FROM public.diagnoses WHERE source_attempt_id = '50000000-0000-0000-0000-000000000002' LIMIT 1),

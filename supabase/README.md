@@ -1,33 +1,45 @@
 # Supabase workspace
 
-This directory contains the version-controlled PostgreSQL migration, local Supabase CLI configuration, and pgTAP database tests. The schema migration is additive: it creates application tables, functions, triggers, grants, indexes, RLS policies, and the initial published Quadratic Equations topic. It does not drop or alter Supabase-managed Auth tables.
+This directory contains the version-controlled PostgreSQL migrations, local Supabase CLI configuration, and pgTAP integration tests. Stage 1 provisions Auth profiles and the learning-domain schema. Stage 2 extends that foundation with assessment APIs, protected answer/grading data, and a clearly labeled development question bank. Migrations do not alter Supabase-managed Auth tables.
+
+## Current configured project
+
+The confirmed remote project is **EduDrishti** (`fdwnreumrodynvixoasl`). Stage 2 migration version `20261028064819` is applied there. Remote inspection confirmed RLS enabled on the application tables and exactly seven development questions, seven answer-key rows, seven guidance rows, and one development assessment. The assessment/response tables had no learner records before deployment.
+
+Rollback-only remote smoke tests passed for student assessment listing/retrieval, pre-completion answer withholding, invalid question and answer rejection, idempotent start/save/completion, deterministic 5/7 scoring with one unanswered response, numeric tolerance, normalized short text, no partial credit, retry attempts, and denial of another student's results. A separate teacher/student smoke exercised a teacher-owned class, question/key/guidance authoring, publication checks, enrollment, student completion, and teacher access to that student's response. Synthetic Auth users, classes, questions, attempts, and responses were rolled back; post-test checks found none remaining.
+
+The repository pgTAP file has 86 assertions, but was not executed. The desktop does not have Docker, `psql`, or the Supabase CLI; the remote database lists pgTAP as available but not installed. No extension was installed solely to run tests. Remote smoke checks are not a substitute for the pgTAP suite.
 
 ## Link and run locally
 
 1. Install the Supabase CLI and Docker Desktop.
-2. Copy `.env.example` to `.env` and set `SUPABASE_PROJECT_REF` to the intended project reference. The project reference is not a credential.
-3. Authenticate with `supabase login` (do not put the CLI access token in Git).
-4. For local development, run `supabase start`, `supabase db reset`, and `supabase test db` from the repository root. The reset command targets only the local Docker database.
-5. To link remote metadata, run `supabase link --project-ref "$SUPABASE_PROJECT_REF"`, then inspect `supabase migration list --linked` and the dashboard before any `supabase db push`.
+2. Copy `.env.example` to `.env` and set `SUPABASE_PROJECT_REF` to the intended project reference. The current non-secret reference is `fdwnreumrodynvixoasl`.
+3. Authenticate with `supabase login`; do not put the CLI token in Git.
+4. For local development, run `supabase start`, `supabase db reset`, and `supabase test db` from the repository root. Reset targets only the local Docker database.
+5. Before linking or deploying remotely, confirm the project reference, run `supabase migration list --linked`, inspect the dashboard/schema and pending SQL, then use `supabase db push` only for the intended project.
 
-The current configured project reference is `fdwnreumrodynvixoasl`. No secrets are stored in `config.toml` or the example environment file. `private` is intentionally excluded from exposed API schemas.
+The `private` schema is intentionally excluded from exposed API schemas. No credentials or service-role keys belong in `config.toml`, `.env.example`, or browser code.
 
-## Authentication and trusted writes
+## Authentication, authoring, and trusted writes
 
-The migration installs an `AFTER INSERT` trigger on `auth.users`. It always creates a `student` profile and ignores role fields supplied in user metadata. New teachers require a trusted operator to update `public.profiles.app_role`; authenticated clients cannot update that column. A teacher creates a class through `public.create_class`, which sets `teacher_id` from the authenticated identity. Enrollment is performed through `public.enroll_student`, which verifies class ownership and student role.
+The Stage 1 `auth.users` trigger creates every profile as `student` and ignores role claims in user metadata. A trusted operator provisions teacher profiles. `public.create_class` sets class ownership from the authenticated teacher, and `public.enroll_student` validates ownership and student role.
 
-Student assessment attempts are started through `public.start_assessment`; answers are saved through `public.save_response`; submission uses `public.submit_assessment`. These functions verify ownership and assessment membership. Direct writes to grading, diagnosis, learning-session, and progress data are restricted to trusted server-side code. Keep service-role credentials in server-side secret storage only.
+Teachers author questions, separate answer keys, and protected guidance through their own RLS-scoped content paths. Only a complete draft with valid keys and guidance can be published. The Stage 2 `development_fixture` template and its sample keys/guidance are inserted by the migration; clients cannot claim this source or assign a teacher owner to those rows.
 
-## Tests and deployment status
+Students use `public.list_available_assessments`, `public.get_assessment`, `public.start_assessment`, `public.save_response`, `public.complete_assessment`, and `public.get_student_results`. Correct answers and explanations are withheld from the retrieval RPC and become available only through the owning student's completed-result RPC. The legacy `public.submit_assessment` remains a compatibility alias to the same server grading path.
 
-`supabase/tests/rls.test.sql` is the PostgreSQL/pgTAP integration suite intended for the local database after migrations. It contains 57 assertions. Run it with `supabase test db`. `tests/test_database_migration.py` performs local static contract checks only; it is not a substitute for running PostgreSQL tests.
+See [../docs/assessment-engine.md](../docs/assessment-engine.md) for argument shapes, scoring, idempotency, error codes, and the result JSON contract.
 
-The additive migration is applied to the active Supabase project (`fdwnreumrodynvixoasl`) and recorded as migration version `20261028061647`. A separate remote transaction-scoped smoke test covered student isolation, teacher class boundaries, role escalation denial, trusted class/enrollment and assessment RPCs, and public-topic access. Its synthetic Auth and learning records were rolled back and remote counts confirmed cleanup. The pgTAP suite itself was not run locally because the Supabase CLI and `psql` are not installed on this computer.
+## Tests and safety
 
-The project was inspected before Stage 1: its `public` schema had no application tables and its migration list was empty. Do not use `supabase db reset` on a remote project; inspect and review migrations before remote deployment.
+Run the local Python contract checks with `python3 -m unittest discover -s tests -v`. They do not execute PostgreSQL. Run pgTAP through `supabase test db` against the local migrated Docker database once the CLI/Docker tools are available. Report remote smoke tests separately from both.
+
+Before applying a migration, inspect the exact project and migration ledger. Stage 2 is additive and contains no `DROP` or `TRUNCATE`; it was applied only after confirming the project and empty assessment/response tables. Do not reset a remote database. See [../docs/development.md](../docs/development.md) for the safe workflow and validation limits.
 
 ## Supabase references
 
-- [Managing user data and Auth-triggered profile provisioning](https://supabase.com/docs/guides/auth/managing-user-data)
+- [Auth-triggered user profile provisioning](https://supabase.com/docs/guides/auth/managing-user-data)
 - [PostgreSQL Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [Database functions and RPC](https://supabase.com/docs/guides/database/functions)
+- [Supabase Data REST API](https://supabase.com/docs/guides/api/rest)
 - [Database migrations](https://supabase.com/docs/guides/deployment/database-migrations)

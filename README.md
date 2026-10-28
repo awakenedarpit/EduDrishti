@@ -1,31 +1,34 @@
 # EduDrishti Learner Intelligence
 
-EduDrishti is an AI-powered adaptive learning platform that helps students identify learning gaps, get targeted explanations and practice, and helps teachers understand classroom learning needs. The initial domain is Class 10 Mathematics, beginning with Quadratic Equations.
+EduDrishti is an adaptive learning platform for students and teachers. The initial learning domain is Class 10 Mathematics, beginning with Quadratic Equations.
 
 ## Current stage
 
-Stage 1 establishes the Supabase PostgreSQL schema, Auth profile provisioning, database access controls, migrations, and security tests. It does not build the student/teacher UI, Gemini workflows, or later-stage learning features. The Google Stitch frontend will be integrated when supplied.
+Stage 2 extends the Supabase foundation with a backend-driven diagnostic assessment workflow, protected answer keys, deterministic server scoring, and student-owned results. It does not yet include the Google Stitch UI, Gemini integrations, or adaptive learning orchestration.
 
-The additive Stage 1 migration is applied to the configured Supabase project (`fdwnreumrodynvixoasl`) and recorded remotely as version `20261028061647`. A remote, transaction-scoped RLS smoke test passed; its synthetic users and learning records were rolled back.
+The seven-question Quadratic Equations diagnostic is explicitly labeled `development_fixture`; it is sample educational content, not an official exam and not learner-performance data. It covers factorisation, roots, discriminant/nature of roots, structured numeric/text responses, and a contextual problem.
+
+The Stage 2 migration was applied to the configured EduDrishti Supabase project as migration version `20261028064819`. Transaction-scoped remote smoke tests exercised student and teacher paths and rolled back all synthetic users and records. See [supabase/README.md](supabase/README.md) for the exact validation limits.
 
 ## Stack and security boundaries
 
-- Supabase Auth provides identity. A database trigger creates every new profile as a student; signup metadata cannot assign a teacher role.
-- Supabase PostgreSQL stores the application data. All exposed application tables have RLS enabled and explicit grants.
-- Supabase Edge Functions or other trusted server-side code are responsible for grading and AI-derived diagnoses/progress. Service-role credentials must never be included in browser code.
-- Vercel remains a possible frontend hosting target once the Stitch source is supplied.
+- Supabase Auth creates student profiles by default; teacher role provisioning remains trusted-operator only.
+- Supabase PostgreSQL stores the application data with RLS, scoped write paths, and versioned migrations.
+- Assessment questions are retrieved through RPCs rather than hardcoded into the future frontend. The client never supplies correctness or score values.
+- Answer keys and post-submit explanations/misconception tags are stored separately and withheld until the student's attempt is graded.
+- Service-role and Gemini credentials remain server-side only.
 
-See [docs/architecture.md](docs/architecture.md) for the data model and access boundaries, and [supabase/README.md](supabase/README.md) for migration and project-linking instructions.
+See [docs/architecture.md](docs/architecture.md), [docs/assessment-engine.md](docs/assessment-engine.md), and [supabase/README.md](supabase/README.md) for architecture, API contract, and migration workflow.
 
-## Database foundation
+## Validation
 
-The migration creates profiles, classes, enrollments, topics, questions, private answer keys, assessments and assessment-question links, attempts, responses, diagnoses, learning sessions, and dated progress records. It also installs scoped class/enrollment/assessment RPCs, constraints, indexes, triggers, and RLS policies. The published Quadratic Equations topic is seeded. It does not create a report table; reports are assembled from protected learning records.
+Local Python checks:
 
-## Validation status
+```sh
+python3 -m unittest discover -s tests -v
+```
 
-`python3 -m unittest discover -s tests -v` passes 13 local tests; these are static contract checks, not PostgreSQL execution. The 57-case pgTAP suite is committed under `supabase/tests/rls.test.sql` but was not run locally because the Supabase CLI and `psql` are unavailable. Separately, the remote smoke test exercised student and teacher RLS/RPC paths against Supabase PostgreSQL 17 and passed with transaction rollback; no fixture data remains.
-
-`supabase db reset` is for the local Docker-backed database only. Follow [docs/development.md](docs/development.md) before linking or deploying to a remote project.
+All 22 local Python tests passed. They are static contract and answer-arithmetic checks, not PostgreSQL execution. `supabase/tests/rls.test.sql` contains 86 pgTAP assertions, but the suite was not run: this computer has no Docker, `psql`, or Supabase CLI, and pgTAP is not installed on the remote database. Remote SQL smoke tests did pass through the Supabase connector, including answer privacy, validation, grading, retries, cross-student denial, teacher authoring, and authorized class access; all synthetic data was rolled back. These remote checks do not replace the pgTAP suite.
 
 ## Repository layout
 
@@ -33,15 +36,18 @@ The migration creates profiles, classes, enrollments, topics, questions, private
 supabase/
 ├── config.toml
 ├── migrations/
-│   └── 20261028061647_stage1_database_auth_rls.sql
+│   ├── 20261028061647_stage1_database_auth_rls.sql
+│   └── 20261028064819_stage2_diagnostic_assessment_engine.sql
 └── tests/
     └── rls.test.sql
 
 docs/
 ├── architecture.md
+├── assessment-engine.md
 └── development.md
 
 tests/
-├── test_foundation.py
-└── test_database_migration.py
+├── test_assessment_contract.py
+├── test_database_migration.py
+└── test_foundation.py
 ```

@@ -2,9 +2,9 @@
 
 ## Prerequisites and configuration
 
-Install Git, Python 3, Docker Desktop, and the Supabase CLI. The repository targets PostgreSQL 17. Copy `.env.example` to the ignored `.env` file and replace secret placeholders only in that local file. `SUPABASE_PROJECT_REF` and `SUPABASE_URL` are project identifiers/endpoints, not credentials. Do not commit `.env`, access tokens, passwords, publishable keys, service-role keys, or Gemini keys.
+Install Git, Python 3, Docker Desktop, and the Supabase CLI for a full local PostgreSQL workflow. The repository targets PostgreSQL 17. Copy `.env.example` to the ignored `.env` file and replace secret placeholders only in that local file. `SUPABASE_PROJECT_REF` and `SUPABASE_URL` are project identifiers/endpoints, not credentials. Do not commit `.env`, access tokens, passwords, publishable keys, service-role keys, or Gemini keys.
 
-The CLI's `supabase/config.toml` configures the local project and API schemas. The `private` schema is intentionally not exposed. The linked project's sign-up providers and email-confirmation behavior remain managed in the Supabase Dashboard; this migration adds the database profile-provisioning trigger but does not change dashboard Auth provider settings.
+`supabase/config.toml` configures the local project and API schemas. The `private` schema is intentionally not exposed. Supabase Auth providers and confirmation behavior remain Dashboard settings; migrations install the profile-provisioning trigger but do not change provider settings.
 
 ## Local workflow
 
@@ -17,26 +17,31 @@ supabase test db
 python3 -m unittest discover -s tests -v
 ```
 
-`supabase db reset` resets only the local Docker-backed database and reapplies migrations. Never use a local reset command against a remote database. The pgTAP suite in `supabase/tests/` exercises constraints and authenticated-role access paths. The Python tests are local static contract checks; they do not execute SQL or prove database authorization.
+`supabase db reset` resets only the local Docker-backed database and reapplies migrations. Never use a local reset command against a remote database. The pgTAP suite in `supabase/tests/rls.test.sql` contains 86 assertions covering constraints, role boundaries, answer validation, scoring, attempt transitions, and result privacy. Python tests are local static contract checks and answer arithmetic checks; they do not execute PostgreSQL or prove RLS behavior.
 
-## Remote project workflow
+## Supabase project and remote workflow
 
-Authenticate the CLI without storing a token in the repository, then link the intended Supabase project:
+The configured project reference is `fdwnreumrodynvixoasl`. Keep it in `.env` as `SUPABASE_PROJECT_REF`; it is not a credential. Authenticate the CLI without storing a token in the repository, then link and inspect the exact target:
 
 ```sh
 supabase login
 supabase link --project-ref "$SUPABASE_PROJECT_REF"
 supabase migration list --linked
+supabase db push
 ```
 
-Review the migration list and current remote schema before deployment. The Stage 1 additive migration is already applied to the current project (`fdwnreumrodynvixoasl`) and recorded as version `20261028061647`; the local migration filename uses that same version. For future migrations, use `supabase db push` only after confirming the linked target and reviewing pending migrations. Do not use destructive migration statements without explicit authorization. Never expose the service-role key to the browser.
+Before any remote push, confirm the project reference and migration ledger, inspect the SQL, and review the current remote schema/data. Do not run `supabase db reset` remotely. Avoid destructive migrations without explicit authorization. Keep service-role keys in server-side secret storage only.
 
-The current project was empty of application tables before Stage 1. A remote RLS smoke test passed in a transaction and rolled back all synthetic records. Remote test results are separate from local test results. The committed pgTAP suite was not run locally because the Supabase CLI and `psql` were unavailable on the development computer.
+Stage 2 migration version `20261028064819` has been applied to the configured EduDrishti project. Transaction-scoped remote SQL smoke tests passed for the student template flow, answer privacy/validation, deterministic scoring, incomplete/retry behavior, cross-student result isolation, teacher authoring/publication, and authorized class access. Their synthetic records were rolled back and verified absent. They are distinct from the pgTAP suite, which was not run: the current desktop lacks Docker, `psql`, and the Supabase CLI, and pgTAP is not installed on the remote database.
 
-## Role provisioning
+## Assessment API
 
-New Auth users become students even if their mutable user metadata claims another role. To provision a teacher, a trusted operator must verify the person's identity and use the Supabase SQL Editor or a protected administrative job to set `app_role = 'teacher'` on that user's profile. Do not expose role-changing SQL through a browser endpoint. Class ownership is assigned internally by `public.create_class`; clients cannot supply `teacher_id` directly.
+See [assessment-engine.md](assessment-engine.md) for JSON input shapes, RPC parameters, SQLSTATE errors, result summary, answer privacy, retry semantics, and scoring rules. Students call `list_available_assessments`, `get_assessment`, `start_assessment`, `save_response`, `complete_assessment`, and `get_student_results` with their Supabase session. The server owns correctness and score calculation. Question explanations and misconception tags are withheld until a student requests their own completed results.
 
-## Database implementation rules
+The seven-item Quadratic Equations assessment is labeled `development_fixture`. It is sample content, not an official exam, and no synthetic learner-performance rows are seeded. Class assessments still require an authorized teacher-owned class and an active student enrollment.
 
-Put schema and policy changes in timestamped SQL migrations. Pair each exposed table's RLS policies with explicit grants. Keep answer keys separate from question content. Keep response grading, diagnoses, and progress writes in trusted server-side code. Add allow and deny tests for every new policy, run `supabase test db`, inspect the staged diff, then commit and push the reviewed change to the agreed branch.
+## Role provisioning and implementation rules
+
+New Auth users become students even if user metadata claims another role. A trusted operator must verify a teacher and provision the role through the Supabase SQL Editor or another protected administrative path. Do not expose role-changing SQL through a browser endpoint. `public.create_class` derives ownership from the authenticated teacher; `public.enroll_student` checks class ownership and student role.
+
+Put schema and policy changes in timestamped SQL migrations. Pair exposed-table RLS with explicit grants, keep answer keys and post-submit guidance separate from student-readable question rows, and use scoped RPCs for attempt lifecycle changes. Add allow and deny tests for each new policy. Review `git diff --check`, run the local checks available, and distinguish all local, remote, and unavailable validations in the delivery report.
