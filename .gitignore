@@ -1,0 +1,33 @@
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+.next/
+.nuxt/
+.output/
+.vercel/
+
+# Supabase local state and generated files
+.supabase/
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+
+# Logs and temporary files
+*.log
+.tmp/
+tmp/
