@@ -20,9 +20,10 @@ class FoundationTests(unittest.TestCase):
             with self.subTest(path=relative_path):
                 self.assertTrue((ROOT / relative_path).is_file())
 
-    def test_environment_example_uses_placeholders(self):
+    def test_environment_example_uses_placeholders_and_nonsecret_project_ref(self):
         env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
-        self.assertIn("your-project-ref", env_example)
+        self.assertIn("SUPABASE_PROJECT_REF=fdwnreumrodynvixoasl", env_example)
+        self.assertIn("SUPABASE_URL=https://fdwnreumrodynvixoasl.supabase.co", env_example)
         self.assertIn("replace-with-your-supabase-publishable-or-anon-key", env_example)
         self.assertIn("replace-with-your-server-only-service-role-key", env_example)
         self.assertIn("replace-with-your-server-only-gemini-api-key", env_example)
@@ -36,9 +37,9 @@ class FoundationTests(unittest.TestCase):
 
     def test_architecture_keeps_ai_keys_server_side(self):
         architecture = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
-        self.assertIn("server-side secret", architecture)
+        self.assertIn("trusted server-side code", architecture)
         self.assertIn("service-role", architecture)
-        self.assertIn("Row Level Security", architecture)
+        self.assertIn("RLS enabled", architecture)
 
 
 if __name__ == "__main__":

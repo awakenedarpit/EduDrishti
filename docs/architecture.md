@@ -1,52 +1,36 @@
-# Intended architecture
+# EduDrishti architecture
 
-This document describes the planned MVP boundaries. It is an implementation guide, not a claim that the services or features have already been configured.
+## Current Stage 1 database foundation
 
-## System overview
+Supabase Auth remains the identity provider. `public.profiles.user_id` is a one-to-one foreign key to `auth.users.id`; an `auth.users` insert trigger creates a profile with the `student` role. Signup metadata is used only for a bounded display name. Any submitted `role` or `app_role` field is ignored.
 
-```text
-Google Stitch frontend (supplied separately)
-        │ Supabase URL + publishable/anon key; authenticated user JWT
-        ▼
-Supabase Auth ── issues identity and session
-        │
-        ├── PostgreSQL + Row Level Security
-        │     └── learner progress, assessments, practice, classroom data
-        │
-        └── Supabase Edge Functions
-              ├── validate user/session and authorize the requested operation
-              ├── read/write only the data needed for that operation
-              └── call Gemini using a server-side secret
-```
+A trusted project operator provisions a teacher by updating `public.profiles.app_role` through the Supabase SQL Editor or another protected administrative path. Authenticated clients have update permission only for `display_name`; they cannot insert profiles or modify the role. There is no self-service teacher promotion flow.
 
-Vercel may host the separately supplied frontend. Supabase is the intended home for authentication, PostgreSQL, and Edge Functions. Avoid introducing additional services unless an identified requirement justifies them.
+## Data model
 
-## Trust boundaries and responsibilities
+- `profiles` stores the application role and display name, not a duplicate email address.
+- `classes` belongs to one teacher. `enrollments` is the class/student join table and carries enrollment status and provenance.
+- `topics` stores subject, grade level, concept code, parent relationship, and metadata. A published Class 10 Mathematics `quadratic-equations` topic is seeded as public educational metadata.
+- `questions` stores question text and options. `question_answer_keys` separately stores correct answers, grading configuration, and rationale so student question access cannot expose solutions.
+- `assessments` belongs to a class. `assessment_questions` records each question's order and points.
+- `assessment_attempts` belongs to a student and assessment. `responses` references the attempt and an actual question in that assessment; score fields are database constrained and writable only by trusted server-side code.
+- `diagnoses` is tied to an assessment attempt and topic, keeping the evidence within the same student/class access boundary.
+- `learning_sessions` and dated `progress_records` use the class/student enrollment relationship. Progress observations are append-oriented rather than overwriting one mutable mastery value.
 
-- The browser is an untrusted client. It may use the Supabase project URL and publishable/anon key, but must never contain a service-role key, database password, Gemini key, or other privileged credential.
-- Supabase Auth establishes identity; it does not by itself authorize access to a particular learner or classroom record.
-- PostgreSQL RLS is the primary data-access boundary. Policies should default to denial and be tested for both allowed and denied cases. Do not rely on frontend checks as authorization.
-- Edge Functions should validate authentication, authorization, input shape, and resource limits before accessing data or calling Gemini. Store privileged credentials in the platform's server-side secret store.
-- AI output is untrusted content. Validate and constrain output before presenting it or using it to affect assessment or mastery records. Provide a human-teacher path for review where appropriate.
+The migration uses UUID keys, foreign keys, unique and check constraints, timestamps, and indexes for the expected ownership and reporting paths. It includes no report table; reports are derived from attempts, responses, diagnoses, sessions, and progress under the same RLS checks.
 
-## Data and domain direction
+## Authorization boundary
 
-The first learning domain is Class 10 Mathematics: Quadratic Equations. Later schema design may need concepts, learning objectives, questions, attempts, misconception signals, practice items, mastery evidence, learners, teachers, and classroom membership. Stage 0 intentionally creates no tables or policies: data relationships, retention, and authorization rules should be specified before a migration is written.
+All tables in the exposed `public` schema have RLS enabled. Grants are revoked from `PUBLIC`, `anon`, and `authenticated` first, then re-granted narrowly. The only unauthenticated read is for published topic metadata. Student reads are scoped to their own profiles, enrollments, attempts, responses, diagnoses, sessions, and progress. Teachers can read records only for classes they own and students linked to those classes. Class creation and enrollment use scoped database functions that derive the teacher identity from `auth.uid()` instead of trusting a client-supplied owner.
 
-Use stable identifiers and explicit relationships; collect only data needed for learning outcomes. Avoid putting identifiable student information in application logs, prompts, analytics, or test fixtures. Use synthetic data for development.
+Students cannot write score, diagnosis, session, or progress fields directly. Assessment start, response save, and submission functions check the current student and assessment membership. Trusted Edge Functions or other server-side code using a server-only service credential remain responsible for grading and AI-derived records. Never expose a service-role key to the frontend.
 
-## Frontend integration contract
+Helper functions live in the non-API `private` schema, use a fixed empty `search_path`, and are `SECURITY DEFINER` only where needed to evaluate related-row authorization without recursive RLS. The local Supabase API config exposes only `public` and `graphql_public`.
 
-When Stitch-generated code is supplied:
+## Frontend and AI integration
 
-1. Inspect its framework, runtime, dependencies, and existing conventions before integrating it.
-2. Keep browser configuration limited to the project URL and publishable/anon key.
-3. Use authenticated Supabase clients and let RLS enforce row access.
-4. Route privileged workflows and Gemini requests through Edge Functions with documented request/response types.
-5. Treat service-role credentials as server-only; never expose them through `VITE_*`, `NEXT_PUBLIC_*`, source maps, or client bundles.
+When Google Stitch source is supplied, inspect its framework before integration. The browser should use the Supabase URL and publishable/anon key. It should call the scoped database functions for class creation/enrollment and assessment participation. Grading, Gemini requests, diagnosis generation, and writes to score/progress data belong in authenticated Edge Functions. Validate identity, resource ownership, request sizes, and output schemas on the server.
 
-Agree on API and data contracts before wiring screens to backend behavior. Do not recreate the UI as part of this foundation stage.
+## Student-data readiness
 
-## Deployment and student-data readiness
-
-Keep development, staging, and production credentials separate. Review database migrations and authorization tests before applying them to shared environments. Before processing real student data, determine applicable consent, privacy, retention/deletion, and incident-response requirements for the deployment jurisdictions and users. This document is not legal advice or a compliance certification.
+Use synthetic learner data during development. Before production student data is processed, define applicable consent, privacy, retention/deletion, and incident-response requirements. Class owner deletion and data retention need an explicit lifecycle workflow before self-service deletion is added.

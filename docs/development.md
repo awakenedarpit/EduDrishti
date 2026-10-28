@@ -1,51 +1,42 @@
 # Development guide
 
-## Current scope
+## Prerequisites and configuration
 
-The repository currently contains documentation and a lightweight foundation check only. There is no app runtime, dependency manifest, configured Supabase project, database schema, Edge Function, or Stitch frontend in this stage.
+Install Git, Python 3, Docker Desktop, and the Supabase CLI. The repository targets PostgreSQL 17. Copy `.env.example` to the ignored `.env` file and replace secret placeholders only in that local file. `SUPABASE_PROJECT_REF` and `SUPABASE_URL` are project identifiers/endpoints, not credentials. Do not commit `.env`, access tokens, passwords, publishable keys, service-role keys, or Gemini keys.
 
-## Prerequisites
+The CLI's `supabase/config.toml` configures the local project and API schemas. The `private` schema is intentionally not exposed. The linked project's sign-up providers and email-confirmation behavior remain managed in the Supabase Dashboard; this migration adds the database profile-provisioning trigger but does not change dashboard Auth provider settings.
 
-- Git for source control.
-- Python 3 for the dependency-free foundation tests.
-- Supabase CLI and a development Supabase project when database or Edge Function work begins.
-- The runtime and package manager required by the supplied Stitch frontend, once its framework is known.
+## Local workflow
 
-Do not install a frontend framework or backend dependency until the actual implementation needs are established.
-
-## Environment variables and secrets
-
-Use `.env.example` as a names-only/sample template. Make a local copy as needed:
+From the repository root:
 
 ```sh
-cp .env.example .env
-```
-
-Replace placeholders only in the ignored local file. Never commit `.env`, paste secrets into source files, or use production credentials for local development. The Supabase service-role key and Gemini API key are server-only secrets; configure them in Supabase's Edge Function secret store when those functions exist. The frontend should receive only the Supabase URL and publishable/anon key.
-
-## Validation
-
-Run the standard-library tests from the repository root:
-
-```sh
+supabase start
+supabase db reset
+supabase test db
 python3 -m unittest discover -s tests -v
 ```
 
-Review the full diff and check that no local environment files, credentials, generated output, or unrelated files are staged before any commit. Once executable backend code is introduced, extend validation to include formatting/type checks appropriate to the chosen runtime, SQL migration checks, RLS tests (including unauthorized access cases), and Edge Function tests.
+`supabase db reset` resets only the local Docker-backed database and reapplies migrations. Never use a local reset command against a remote database. The pgTAP suite in `supabase/tests/` exercises constraints and authenticated-role access paths. The Python tests are local static contract checks; they do not execute SQL or prove database authorization.
 
-## Database and backend workflow (future)
+## Remote project workflow
 
-1. Agree on entities, ownership, classroom membership, and authorization rules before schema design.
-2. Create a reviewed, ordered SQL migration for each schema change; do not make undocumented dashboard-only changes.
-3. Add RLS policies with deny-by-default behavior and tests for each role and access path.
-4. Put privileged data operations and Gemini calls in Edge Functions. Validate JWTs, inputs, output schemas, and quotas server-side.
-5. Use synthetic learner data in development and test environments.
-6. Apply migrations and deploy functions to the intended Supabase environment only after review and authorization.
+Authenticate the CLI without storing a token in the repository, then link the intended Supabase project:
 
-## Frontend integration workflow (future)
+```sh
+supabase login
+supabase link --project-ref "$SUPABASE_PROJECT_REF"
+supabase migration list --linked
+```
 
-Wait for the Google Stitch-generated source. Inspect it before choosing integration steps, preserve its existing framework conventions, add only required dependencies, and connect it to documented Supabase contracts. Do not recreate or replace the frontend as part of Stage 0.
+Review the migration list and current remote schema before deployment. The Stage 1 additive migration is already applied to the current project (`fdwnreumrodynvixoasl`) and recorded as version `20261028061647`; the local migration filename uses that same version. For future migrations, use `supabase db push` only after confirming the linked target and reviewing pending migrations. Do not use destructive migration statements without explicit authorization. Never expose the service-role key to the browser.
 
-## Git and review workflow
+The current project was empty of application tables before Stage 1. A remote RLS smoke test passed in a transaction and rolled back all synthetic records. Remote test results are separate from local test results. The committed pgTAP suite was not run locally because the Supabase CLI and `psql` were unavailable on the development computer.
 
-Work on the agreed branch, use descriptive Conventional Commit messages, run checks before committing, inspect staged files, and never force-push or commit secrets. Push only after repository access and the target branch are confirmed.
+## Role provisioning
+
+New Auth users become students even if their mutable user metadata claims another role. To provision a teacher, a trusted operator must verify the person's identity and use the Supabase SQL Editor or a protected administrative job to set `app_role = 'teacher'` on that user's profile. Do not expose role-changing SQL through a browser endpoint. Class ownership is assigned internally by `public.create_class`; clients cannot supply `teacher_id` directly.
+
+## Database implementation rules
+
+Put schema and policy changes in timestamped SQL migrations. Pair each exposed table's RLS policies with explicit grants. Keep answer keys separate from question content. Keep response grading, diagnoses, and progress writes in trusted server-side code. Add allow and deny tests for every new policy, run `supabase test db`, inspect the staged diff, then commit and push the reviewed change to the agreed branch.

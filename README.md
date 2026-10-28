@@ -1,58 +1,47 @@
 # EduDrishti Learner Intelligence
 
-EduDrishti is an AI-powered adaptive learning platform intended to help students understand where they are struggling, receive targeted explanations and practice, and help teachers identify learning needs across a class.
-
-## Product direction
-
-The initial learning domain is Class 10 Mathematics, beginning with Quadratic Equations. The planned MVP includes a student dashboard, diagnostic assessment, misconception detection, personalized explanations, generated practice, mastery tracking, teacher/classroom analytics, and assessment reports. These are product goals, not implemented features in this foundation.
+EduDrishti is an AI-powered adaptive learning platform that helps students identify learning gaps, get targeted explanations and practice, and helps teachers understand classroom learning needs. The initial domain is Class 10 Mathematics, beginning with Quadratic Equations.
 
 ## Current stage
 
-This repository contains the Stage 0 project foundation only. It deliberately does not implement application features or recreate the separately generated Google Stitch frontend. Frontend code will be integrated when supplied.
+Stage 1 establishes the Supabase PostgreSQL schema, Auth profile provisioning, database access controls, migrations, and security tests. It does not build the student/teacher UI, Gemini workflows, or later-stage learning features. The Google Stitch frontend will be integrated when supplied.
 
-## Intended architecture
+The additive Stage 1 migration is applied to the configured Supabase project (`fdwnreumrodynvixoasl`) and recorded remotely as version `20261028061647`. A remote, transaction-scoped RLS smoke test passed; its synthetic users and learning records were rolled back.
 
-- **Database:** Supabase PostgreSQL, with schema changes managed as reviewed SQL migrations.
-- **Authentication and authorization:** Supabase Auth with PostgreSQL Row Level Security (RLS). RLS policies are required before student or classroom data is exposed.
-- **Secure backend operations:** Supabase Edge Functions for trusted operations, including calls to external AI services.
-- **AI:** Gemini API, called server-side from Edge Functions. Provider keys must never be bundled into browser code.
-- **Frontend:** Google Stitch-generated client, to be supplied separately and connected using only the Supabase project URL and publishable/anon key.
-- **Deployment:** Vercel is a possible frontend hosting target; Supabase remains the managed database, auth, and edge-function platform.
+## Stack and security boundaries
 
-See [docs/architecture.md](docs/architecture.md) for the integration boundaries and security principles.
+- Supabase Auth provides identity. A database trigger creates every new profile as a student; signup metadata cannot assign a teacher role.
+- Supabase PostgreSQL stores the application data. All exposed application tables have RLS enabled and explicit grants.
+- Supabase Edge Functions or other trusted server-side code are responsible for grading and AI-derived diagnoses/progress. Service-role credentials must never be included in browser code.
+- Vercel remains a possible frontend hosting target once the Stitch source is supplied.
+
+See [docs/architecture.md](docs/architecture.md) for the data model and access boundaries, and [supabase/README.md](supabase/README.md) for migration and project-linking instructions.
+
+## Database foundation
+
+The migration creates profiles, classes, enrollments, topics, questions, private answer keys, assessments and assessment-question links, attempts, responses, diagnoses, learning sessions, and dated progress records. It also installs scoped class/enrollment/assessment RPCs, constraints, indexes, triggers, and RLS policies. The published Quadratic Equations topic is seeded. It does not create a report table; reports are assembled from protected learning records.
+
+## Validation status
+
+`python3 -m unittest discover -s tests -v` passes 13 local tests; these are static contract checks, not PostgreSQL execution. The 57-case pgTAP suite is committed under `supabase/tests/rls.test.sql` but was not run locally because the Supabase CLI and `psql` are unavailable. Separately, the remote smoke test exercised student and teacher RLS/RPC paths against Supabase PostgreSQL 17 and passed with transaction rollback; no fixture data remains.
+
+`supabase db reset` is for the local Docker-backed database only. Follow [docs/development.md](docs/development.md) before linking or deploying to a remote project.
 
 ## Repository layout
 
 ```text
-.
-├── docs/
-│   ├── architecture.md
-│   └── development.md
-├── supabase/
-│   └── README.md
+supabase/
+├── config.toml
+├── migrations/
+│   └── 20261028061647_stage1_database_auth_rls.sql
 └── tests/
-    └── test_foundation.py
+    └── rls.test.sql
+
+docs/
+├── architecture.md
+└── development.md
+
+tests/
+├── test_foundation.py
+└── test_database_migration.py
 ```
-
-## Local setup
-
-1. Clone the agreed GitHub repository once it has been created and access is available.
-2. Copy `.env.example` to a local `.env` file and replace placeholders only with credentials for your own development project. `.env` is ignored by Git.
-3. Do not put Supabase service-role keys or Gemini API keys in frontend environment variables or browser code. Those secrets belong in Supabase Edge Function secrets when backend implementation begins.
-4. Review [docs/development.md](docs/development.md) before adding code or connecting real student data.
-
-No application runtime, dependencies, Supabase project, or credentials are created by this Stage 0 scaffold.
-
-## Validation
-
-The foundation uses Python's standard library for its initial checks; no Python packages are needed:
-
-```sh
-python3 -m unittest discover -s tests -v
-```
-
-Run this after documentation or configuration changes. Backend changes should later add migration validation, RLS/authorization tests, and Edge Function tests before deployment.
-
-## Development workflow
-
-Keep changes small and reviewable. Use SQL migrations for database changes; define and test RLS policies alongside tables; keep privileged operations and AI calls in Edge Functions; and integrate the Stitch frontend only when its source is provided. Before any deployment involving student data, establish the applicable consent, privacy, retention, and incident-response requirements.

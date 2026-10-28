@@ -15,6 +15,8 @@ coverage/
 
 # Supabase local state and generated files
 .supabase/
+supabase/.temp/
+supabase/.branches/
 
 # Python caches and virtual environments
 __pycache__/
