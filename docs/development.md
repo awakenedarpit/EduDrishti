@@ -34,6 +34,8 @@ Before any remote push, confirm the project reference and migration ledger, insp
 
 Stage 2 migration version `20261028064819` has been applied to the configured EduDrishti project. Transaction-scoped remote SQL smoke tests passed for the student template flow, answer privacy/validation, deterministic scoring, incomplete/retry behavior, cross-student result isolation, teacher authoring/publication, and authorized class access. Their synthetic records were rolled back and verified absent. They are distinct from the pgTAP suite, which was not run: the current desktop lacks Docker, `psql`, and the Supabase CLI, and pgTAP is not installed on the remote database.
 
+Stage 3 source is in `supabase/migrations/20261028093000_stage3_misconception_engine.sql`; it has not been applied to the remote project. It adds protected answer-pattern rules, same-transaction diagnosis generation on grading, and student/teacher-scoped diagnosis RPCs. Run `supabase test db` locally to execute `supabase/tests/diagnosis_engine.test.sql`; until the migration is applied, diagnosis and heatmap UI destinations remain unavailable.
+
 ## Assessment API
 
 See [assessment-engine.md](assessment-engine.md) for JSON input shapes, RPC parameters, SQLSTATE errors, result summary, answer privacy, retry semantics, and scoring rules. Students call `list_available_assessments`, `get_assessment`, `start_assessment`, `save_response`, `complete_assessment`, and `get_student_results` with their Supabase session. The server owns correctness and score calculation. Question explanations and misconception tags are withheld until a student requests their own completed results.

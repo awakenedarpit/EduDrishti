@@ -16,6 +16,8 @@ const ReportsPage = lazy(() => import("./features/assessments/ReportsPage").then
 const StudentDashboard = lazy(() => import("./features/assessments/StudentDashboard").then((module) => ({ default: module.StudentDashboard })));
 const TeacherClassesPage = lazy(() => import("./features/teacher/TeacherPages").then((module) => ({ default: module.TeacherClassesPage })));
 const TeacherDashboardPage = lazy(() => import("./features/teacher/TeacherPages").then((module) => ({ default: module.TeacherDashboardPage })));
+const StudentDiagnosisPage = lazy(() => import("./features/diagnosis/DiagnosisPages").then((module) => ({ default: module.StudentDiagnosisPage })));
+const TeacherMisconceptionPage = lazy(() => import("./features/diagnosis/DiagnosisPages").then((module) => ({ default: module.TeacherMisconceptionPage })));
 
 function SetupRequired() {
   const navigate = useNavigate();
@@ -91,7 +93,7 @@ const router = createBrowserRouter([
           { path: "/attempts/:attemptId", element: <StudentOnly><AssessmentAttemptPage /></StudentOnly> },
           { path: "/attempts/:attemptId/results", element: <StudentOnly><AssessmentResultsPage /></StudentOnly> },
           { path: "/reports", element: <StudentOnly><ReportsPage /></StudentOnly> },
-          { path: "/diagnosis", element: <PlaceholderRoute path="/diagnosis" /> },
+          { path: "/diagnosis", element: <StudentOnly><StudentDiagnosisPage /></StudentOnly> },
           { path: "/learning-hub", element: <PlaceholderRoute path="/learning-hub" /> },
           { path: "/learning-hub/concepts", element: <PlaceholderRoute path="/learning-hub/concepts" /> },
           { path: "/learning-hub/explanations", element: <PlaceholderRoute path="/learning-hub/explanations" /> },
@@ -104,7 +106,7 @@ const router = createBrowserRouter([
           { path: "/teacher/students", element: <PlaceholderRoute path="/teacher/students" teacher /> },
           { path: "/teacher/assessments", element: <PlaceholderRoute path="/teacher/assessments" teacher /> },
           { path: "/teacher/analytics", element: <PlaceholderRoute path="/teacher/analytics" teacher /> },
-          { path: "/teacher/misconceptions", element: <PlaceholderRoute path="/teacher/misconceptions" teacher /> },
+          { path: "/teacher/misconceptions", element: <TeacherOnly><TeacherMisconceptionPage /></TeacherOnly> },
           { path: "/teacher/practice-allocator", element: <PlaceholderRoute path="/teacher/practice-allocator" teacher /> },
           { path: "/teacher/teaching-insights", element: <PlaceholderRoute path="/teacher/teaching-insights" teacher /> },
           { path: "/teacher/reports", element: <PlaceholderRoute path="/teacher/reports" teacher /> },

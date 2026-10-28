@@ -10,6 +10,10 @@ Rollback-only remote smoke tests passed for student assessment listing/retrieval
 
 The repository pgTAP file has 86 assertions, but was not executed. The desktop does not have Docker, `psql`, or the Supabase CLI; the remote database lists pgTAP as available but not installed. No extension was installed solely to run tests. Remote smoke checks are not a substitute for the pgTAP suite.
 
+## Stage 3 misconception engine
+
+The additive Stage 3 migration `20261028093000_stage3_misconception_engine.sql` installs protected, exact-answer-pattern rules and generates findings only for matched, incorrect, answered responses at grading time. It exposes `get_student_diagnoses` for a student's own completed attempt and `get_class_misconception_summary` for the owning teacher. Unmatched incorrect answers remain undiagnosed. The migration has not been applied to the configured remote project; its dedicated transaction-scoped pgTAP tests are in `supabase/tests/diagnosis_engine.test.sql`. See [../docs/misconception-engine.md](../docs/misconception-engine.md).
+
 ## Link and run locally
 
 1. Install the Supabase CLI and Docker Desktop.

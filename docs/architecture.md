@@ -2,7 +2,7 @@
 
 ## Current foundation
 
-EduDrishti uses Supabase Auth and PostgreSQL. The initial learning domain is Class 10 Mathematics, beginning with Quadratic Equations. Stage 2 adds a database-backed diagnostic assessment engine; it does not yet include the Stitch student/teacher UI, AI diagnosis generation, or adaptive practice orchestration.
+EduDrishti uses Supabase Auth and PostgreSQL. The initial learning domain is Class 10 Mathematics, beginning with Quadratic Equations. Stage 2 adds a database-backed assessment engine; Stage 3 adds deterministic, reviewed-distractor diagnosis rules. Neither stage supplies AI-generated diagnosis or adaptive practice orchestration.
 
 ## Identity and roles
 
@@ -16,7 +16,7 @@ EduDrishti uses Supabase Auth and PostgreSQL. The initial learning domain is Cla
 - `questions` stores prompt, type, answer options, topic, difficulty (1–5), concept, and content source. `question_answer_keys` stores correct-answer configuration separately. `question_guidance` stores explanations and misconception tags separately from student-readable question rows.
 - `assessments` and `assessment_questions` define class assignments or explicitly marked development templates, ordered questions, and positive point weights.
 - `assessment_attempts` belongs to one student and assessment. `responses` records submitted answers, timestamps, answered state, correctness, score percentage, points earned, and feedback.
-- `diagnoses`, `learning_sessions`, and dated `progress_records` remain distinct protected learner records. Stage 2 does not generate diagnoses or synthetic performance data.
+- `diagnoses`, `learning_sessions`, and dated `progress_records` remain distinct protected learner records. Stage 3 generates a diagnosis only when an incorrect graded response matches an active, exact answer-pattern rule; unmatched errors remain unclassified. Stage 3 does not insert synthetic learner performance.
 
 Schema changes are versioned in `supabase/migrations/`. Tables use UUID primary keys, foreign keys, checks, unique constraints, timestamps, and indexes. Exposed public tables use RLS and explicit grants.
 
@@ -24,9 +24,9 @@ Schema changes are versioned in `supabase/migrations/`. Tables use UUID primary 
 
 Authenticated students retrieve available assessments and question content through database RPCs. The browser does not receive answer keys, explanations, or misconception tags before completion. A published seven-item Quadratic Equations assessment is labeled `development_fixture` and can be taken by authenticated student profiles without inventing a teacher or class. Teacher-created assessments remain scoped to the teacher's own class and its active enrollments.
 
-Students start through `public.start_assessment`, save strict JSON answers through `public.save_response`, and complete through `public.complete_assessment`. These server-side database functions check identity, role, assessment access, attempt ownership/state, question membership, and answer shape. They calculate correctness and points from protected answer keys; client-supplied scores are never accepted. Multiple-choice questions are all-or-nothing; numeric tolerance is stored server-side; normalized short-text matching is exact against accepted answers. Unanswered items are recorded at completion and earn zero. Completion is idempotent, and a completed student can intentionally start another numbered attempt.
+Students start through `public.start_assessment`, save strict JSON answers through `public.save_response`, and complete through `public.complete_assessment`. These server-side database functions check identity, role, assessment access, attempt ownership/state, question membership, and answer shape. They calculate correctness and points from protected answer keys; client-supplied scores are never accepted. Multiple-choice questions are all-or-nothing; numeric tolerance is stored server-side; normalized short-text matching is exact against accepted answers. Unanswered items are recorded at completion and earn zero. Completion is idempotent, and a completed student can intentionally start another numbered attempt. On the transition to `graded`, Stage 3 matches responses against protected rules and stores evidence-linked diagnoses in the same transaction.
 
-`public.get_student_results` returns a versioned summary only to the student who owns a graded attempt. It then includes item correctness, points, correct answers, explanations, and misconception tags. Teacher reads remain bounded by owned classes and enrolled students through the existing RLS rules; template attempts have no class owner and are visible only to their student.
+`public.get_student_results` returns a versioned summary only to the student who owns a graded attempt. It then includes item correctness, points, correct answers, explanations, and misconception tags. `public.get_student_diagnoses` returns only that student's findings for a graded attempt. `public.get_class_misconception_summary` returns category counts only to the owning teacher and does not identify students. Teacher reads remain bounded by owned classes and enrolled students through the existing RLS rules; template attempts have no class owner and are visible only to their student.
 
 ## Authorization and API boundaries
 

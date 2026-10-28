@@ -87,6 +87,9 @@ export type Database = {
       };
       complete_assessment: { Args: { p_attempt_id: string }; Returns: Json };
       get_student_results: { Args: { p_attempt_id: string }; Returns: Json };
+      get_student_diagnoses: { Args: { p_attempt_id: string }; Returns: Json };
+      get_my_recent_diagnoses: { Args: { p_limit?: number }; Returns: Json };
+      get_class_misconception_summary: { Args: { p_class_id: string; p_assessment_id?: string | null }; Returns: Json };
       create_class: {
         Args: { p_name: string; p_grade_level: number; p_subject: string; p_description?: string | null };
         Returns: string;

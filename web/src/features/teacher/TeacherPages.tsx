@@ -29,13 +29,13 @@ export function TeacherDashboardPage() {
       <div className="metric-grid metric-grid-three">
         <Surface className="metric-card"><div className="metric-heading"><span>YOUR CLASSES</span><span className="metric-icon teal-icon"><School size={17} /></span></div><strong>{loading ? "—" : classes.length}</strong><span className="metric-foot">RLS-scoped to this teacher</span></Surface>
         <Surface className="metric-card"><div className="metric-heading"><span>LEARNER RECORDS</span><span className="metric-icon blue-icon"><Users size={17} /></span></div><strong>—</strong><span className="metric-foot">Roster insights are not connected</span></Surface>
-        <Surface className="metric-card"><div className="metric-heading"><span>DIAGNOSIS ANALYTICS</span><span className="metric-icon amber-icon"><School size={17} /></span></div><strong>—</strong><span className="metric-foot">Stage 3 RPCs not installed</span></Surface>
+        <Surface className="metric-card"><div className="metric-heading"><span>DIAGNOSIS ANALYTICS</span><span className="metric-icon amber-icon"><School size={17} /></span></div><strong>—</strong><span className="metric-foot">Open the class heatmap for matched findings</span></Surface>
       </div>
       <div className="section-heading"><div><p className="eyebrow">CLASSROOMS</p><h2>Classes you manage</h2></div><Link to="/teacher/classes" className="text-link">Open classes <ArrowRight size={15} /></Link></div>
       <Surface>
         {error ? <EmptyState title="Class list unavailable">The database did not return this teacher's authorized classes. Review the access message above.</EmptyState> : loading ? <p className="muted">Loading your classes…</p> : classes.length ? <div className="class-list">{classes.slice(0, 4).map((item) => <ClassCard item={item} key={item.id} />)}</div> : <EmptyState title="No classes yet">Create a class to begin organizing your teaching workspace.</EmptyState>}
       </Surface>
-      <Notice tone="info" title="What is connected">Class listing and creation are live. Student insights, practice allocation, reports, and misconception analytics are shown as placeholders until their services are available.</Notice>
+      <Notice tone="info" title="What is connected">Class listing and creation are live. The misconception heatmap uses the Stage 3 aggregate RPC when that migration is installed; other insight, practice, and report destinations remain placeholders.</Notice>
     </div>
   );
 }
