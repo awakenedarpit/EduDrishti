@@ -8,11 +8,17 @@ The confirmed remote project is **EduDrishti** (`fdwnreumrodynvixoasl`). Stage 2
 
 Rollback-only remote smoke tests passed for student assessment listing/retrieval, pre-completion answer withholding, invalid question and answer rejection, idempotent start/save/completion, deterministic 5/7 scoring with one unanswered response, numeric tolerance, normalized short text, no partial credit, retry attempts, and denial of another student's results. A separate teacher/student smoke exercised a teacher-owned class, question/key/guidance authoring, publication checks, enrollment, student completion, and teacher access to that student's response. Synthetic Auth users, classes, questions, attempts, and responses were rolled back; post-test checks found none remaining.
 
-The repository pgTAP file has 86 assertions, but was not executed. The desktop does not have Docker, `psql`, or the Supabase CLI; the remote database lists pgTAP as available but not installed. No extension was installed solely to run tests. Remote smoke checks are not a substitute for the pgTAP suite.
+The repository pgTAP file has 86 assertions, but was not executed. Docker is installed, but this desktop has neither `psql` nor the Supabase CLI and no PostgreSQL/Supabase image is cached locally. The remote database lists pgTAP as available but not installed. No extension was installed solely to run tests. Remote smoke checks are not a substitute for the pgTAP suite.
 
 ## Stage 3 misconception engine
 
 The additive Stage 3 migration `20261028093000_stage3_misconception_engine.sql` installs protected, exact-answer-pattern rules and generates findings only for matched, incorrect, answered responses at grading time. It exposes `get_student_diagnoses` for a student's own completed attempt and `get_class_misconception_summary` for the owning teacher. Unmatched incorrect answers remain undiagnosed. The migration has not been applied to the configured remote project; its dedicated transaction-scoped pgTAP tests are in `supabase/tests/diagnosis_engine.test.sql`. See [../docs/misconception-engine.md](../docs/misconception-engine.md).
+
+## Stage 4 AI learning services
+
+The additive Stage 4 migration is `migrations/20261029222500_stage4_ai_learning_services.sql`. It adds private, non-API-exposed AI artifact/answer storage and database-backed per-minute rate limits. Service-role-only RPCs validate student ownership and graded-attempt membership before loading topic context, persisting artifacts, or checking generated practice answers. The Edge Functions are `personalized-explanation`, `targeted-practice`, and `check-practice-answer`; all keep JWT verification enabled. See [../docs/ai-learning-services.md](../docs/ai-learning-services.md) for exact request/response contracts, Gemini secrets, output validation, and fallback behavior.
+
+The Stage 4 migration and Edge Functions have not been applied or deployed remotely. Do not deploy them until the exact Supabase project and migration ledger have been reviewed. Configure `GEMINI_API_KEY`, optional `GEMINI_MODEL`, and `AI_ALLOWED_ORIGINS` as Edge Function secrets; never put the Gemini or Supabase service-role/secret key in browser code or source control. The committed `functions/.env.example` contains placeholders only.
 
 ## Link and run locally
 

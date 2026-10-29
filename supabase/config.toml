@@ -12,6 +12,15 @@ major_version = 17
 [db.seed]
 enabled = false
 
+[functions.personalized-explanation]
+verify_jwt = true
+
+[functions.targeted-practice]
+verify_jwt = true
+
+[functions.check-practice-answer]
+verify_jwt = true
+
 [auth]
 enabled = true
 site_url = "http://127.0.0.1:3000"

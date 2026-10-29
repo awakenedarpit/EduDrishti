@@ -2,7 +2,7 @@
 
 ## Current foundation
 
-EduDrishti uses Supabase Auth and PostgreSQL. The initial learning domain is Class 10 Mathematics, beginning with Quadratic Equations. Stage 2 adds a database-backed assessment engine; Stage 3 adds deterministic, reviewed-distractor diagnosis rules. Neither stage supplies AI-generated diagnosis or adaptive practice orchestration.
+EduDrishti uses Supabase Auth and PostgreSQL. The initial learning domain is Class 10 Mathematics, beginning with Quadratic Equations. Stage 2 adds a database-backed assessment engine; Stage 3 adds deterministic, reviewed-distractor diagnosis rules; Stage 4 adds authenticated server-side Gemini explanation and targeted-practice functions. Stage 4 does not use AI to create diagnoses.
 
 ## Identity and roles
 
@@ -17,6 +17,7 @@ EduDrishti uses Supabase Auth and PostgreSQL. The initial learning domain is Cla
 - `assessments` and `assessment_questions` define class assignments or explicitly marked development templates, ordered questions, and positive point weights.
 - `assessment_attempts` belongs to one student and assessment. `responses` records submitted answers, timestamps, answered state, correctness, score percentage, points earned, and feedback.
 - `diagnoses`, `learning_sessions`, and dated `progress_records` remain distinct protected learner records. Stage 3 generates a diagnosis only when an incorrect graded response matches an active, exact answer-pattern rule; unmatched errors remain unclassified. Stage 3 does not insert synthetic learner performance.
+- Stage 4 stores AI-generated explanations, generated practice answer keys, provenance, and submitted practice responses in the non-exposed `private` schema. The browser cannot query stored keys directly.
 
 Schema changes are versioned in `supabase/migrations/`. Tables use UUID primary keys, foreign keys, checks, unique constraints, timestamps, and indexes. Exposed public tables use RLS and explicit grants.
 
@@ -36,7 +37,7 @@ The `private` schema is not exposed by the Supabase Data API. Authorization help
 
 ## Frontend and AI integration
 
-When the Google Stitch source is supplied, inspect its framework before integration. Browser code should use the Supabase URL and publishable/anon key and call the documented RPCs in [assessment-engine.md](assessment-engine.md). Grading remains inside the database. Gemini requests, AI-generated diagnoses, and writes to downstream progress belong in trusted server-side code with strict input/output validation and server-only AI credentials.
+Browser code uses the Supabase URL and publishable/anon key. It calls the documented assessment RPCs and the user-authenticated Edge Functions in [ai-learning-services.md](ai-learning-services.md). The Edge Functions accept attempt/question identifiers only, reload the student's own graded results, and include only an exact Stage 3 `rule_based` match as diagnosis evidence. Free-text answers are omitted from provider prompts. Gemini credentials and private answer keys stay server-side. The practice endpoint withholds its generated key until the learner submits an option to the answer-check endpoint. Structured outputs are schema-validated; quadratic discriminants and integer roots are recomputed deterministically before persistence. The Stage 3 diagnosis engine remains the fallback when Gemini is unavailable. Gemini requests run only in trusted server-side code.
 
 ## Student-data readiness
 

@@ -32,9 +32,15 @@ supabase db push
 
 Before any remote push, confirm the project reference and migration ledger, inspect the SQL, and review the current remote schema/data. Do not run `supabase db reset` remotely. Avoid destructive migrations without explicit authorization. Keep service-role keys in server-side secret storage only.
 
-Stage 2 migration version `20261028064819` has been applied to the configured EduDrishti project. Transaction-scoped remote SQL smoke tests passed for the student template flow, answer privacy/validation, deterministic scoring, incomplete/retry behavior, cross-student result isolation, teacher authoring/publication, and authorized class access. Their synthetic records were rolled back and verified absent. They are distinct from the pgTAP suite, which was not run: the current desktop lacks Docker, `psql`, and the Supabase CLI, and pgTAP is not installed on the remote database.
+Stage 2 migration version `20261028064819` has been applied to the configured EduDrishti project. Transaction-scoped remote SQL smoke tests passed for the student template flow, answer privacy/validation, deterministic scoring, incomplete/retry behavior, cross-student result isolation, teacher authoring/publication, and authorized class access. Their synthetic records were rolled back and verified absent. They are distinct from the pgTAP suite, which was not run: Docker is installed, but the current desktop lacks `psql` and the Supabase CLI; pgTAP is not installed on the remote database.
 
 Stage 3 source is in `supabase/migrations/20261028093000_stage3_misconception_engine.sql`; it has not been applied to the remote project. It adds protected answer-pattern rules, same-transaction diagnosis generation on grading, and student/teacher-scoped diagnosis RPCs. Run `supabase test db` locally to execute `supabase/tests/diagnosis_engine.test.sql`; until the migration is applied, diagnosis and heatmap UI destinations remain unavailable.
+
+## Stage 4 AI learning services
+
+Stage 4 source is in `supabase/migrations/20261029222500_stage4_ai_learning_services.sql` and `supabase/functions/`. It is not deployed to the configured remote project. The functions validate the signed-in student, load only that student's graded assessment records, and store generated content and practice keys in private-schema tables through service-role-only RPCs. The Gemini API key belongs only in Supabase Edge Function secrets; use `supabase/functions/.env.example` as a placeholder template for local development and never commit the real `.env` file.
+
+Run deterministic validation and mocked-handler/backend checks with `node --experimental-strip-types --test supabase/functions/_shared/*.test.ts`, static contracts with `python3 -m unittest discover -s tests -v`, and database permissions with `supabase test db` against a local stack. For a real Edge Function runtime, start the local stack and serve the functions with `supabase functions serve personalized-explanation targeted-practice check-practice-answer --env-file supabase/functions/.env`. No live Gemini request is considered verified until a test environment has a valid server-side key.
 
 ## Assessment API
 
