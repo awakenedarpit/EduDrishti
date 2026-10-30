@@ -78,6 +78,9 @@ class TeacherDashboardContractTests(unittest.TestCase):
             with self.subTest(term=term):
                 self.assertIn(term, MIGRATION)
         self.assertIn("latest **graded** attempt per active enrolled learner", DOCS)
+        for band in ("below_40_further_practice", "40_to_below_70_developing", "70_or_above_secure_for_now"):
+            with self.subTest(documented_band=band):
+                self.assertIn(band, DOCS)
 
     def test_diagnoses_and_recommendations_preserve_uncertainty_and_supportive_tone(self):
         for phrase in (
