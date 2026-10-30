@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { EmptyState, Notice, PageHeading, StatusBadge, Surface } from "../../components/ui";
 import { friendlyBackendError } from "../../lib/backend-errors";
 import { listAvailableAssessments, listMyAttempts, startAssessment, type AssessmentSummary, type AttemptRow } from "./api";
+import { getStudentProgressOverview, type StudentProgressOverview } from "../progress/api";
 
 function dateLabel(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
@@ -16,6 +17,9 @@ export function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [progress, setProgress] = useState<StudentProgressOverview | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
+  const [progressError, setProgressError] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -23,6 +27,18 @@ export function StudentDashboard() {
       .then(([available, history]) => { if (alive) { setAssessments(available); setAttempts(history); } })
       .catch((cause) => { if (alive) setError(friendlyBackendError(cause).message); })
       .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    getStudentProgressOverview().then((result) => {
+      if (alive) setProgress(result);
+    }).catch(() => {
+      if (alive) setProgressError(true);
+    }).finally(() => {
+      if (alive) setProgressLoading(false);
+    });
     return () => { alive = false; };
   }, []);
 
@@ -52,6 +68,12 @@ export function StudentDashboard() {
         <Surface className="metric-card"><div className="metric-heading"><span>COMPLETED ATTEMPTS</span><span className="metric-icon amber-icon"><BookOpenCheck size={17} /></span></div><strong>{loading ? "—" : completed.length}</strong><span className="metric-foot">Server-graded submissions</span></Surface>
         <Surface className="metric-card"><div className="metric-heading"><span>IN PROGRESS</span><span className="metric-icon blue-icon"><Clock3 size={17} /></span></div><strong>{loading ? "—" : attempts.filter((attempt) => attempt.status === "in_progress").length}</strong><span className="metric-foot">Saved by the assessment service</span></Surface>
       </div>
+
+      <div className="section-heading"><div><p className="eyebrow">PROGRESS SNAPSHOT</p><h2>What your evidence shows</h2></div><Link className="text-link" to="/progress">Open progress <ArrowRight size={15} /></Link></div>
+      <Surface className="dashboard-progress-preview">
+        {progressLoading ? <p className="muted">Loading your progress summary…</p> : progress ? <div className="dashboard-progress-stats"><div><strong>{progress.totals.topics_with_evidence}</strong><span>topics with evidence</span></div><div><strong>{progress.totals.secure_topics}</strong><span>topics meeting the secure threshold</span></div><p>These are versioned summaries from graded assessment answers and completed practice. Topics without enough evidence remain unclassified.</p></div> : <EmptyState title="Progress summary unavailable">The Stage 5 progress service could not be reached. Your assessment dashboard remains available; try the progress view again after the service is configured.</EmptyState>}
+        {progressError && !progressLoading && <p className="honesty-note">The summary is not treated as zero or inferred when the database does not return it.</p>}
+      </Surface>
 
       {highlighted ? (
         <Surface className="dashboard-feature">

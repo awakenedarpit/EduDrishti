@@ -4,7 +4,7 @@ EduDrishti is an adaptive learning platform for students and teachers. The initi
 
 ## Current stage
 
-Stage 2 provides protected assessment data and deterministic server scoring. Stage 3 adds reviewed, evidence-linked misconception rules. Stage 4 adds three authenticated Supabase Edge Functions for personalized explanations, targeted practice, and practice-answer checking, backed by Gemini structured output and deterministic math validation. The Vercel-ready React UI remains under `web/`. Stage 3 and Stage 4 migrations/functions are source code until deployed; no AI key or live-provider validation is included. See [docs/ai-learning-services.md](docs/ai-learning-services.md) for endpoint contracts, security, secrets, tests, and limitations.
+Stage 2 provides protected assessment data and deterministic server scoring. Stage 3 adds reviewed, evidence-linked misconception rules. Stage 4 adds authenticated server-side AI explanations and targeted practice. Stage 5 adds versioned progress snapshots, evidence-aware student progress/history/comparison RPCs, and owner-scoped aggregate teacher analytics. The `/progress`, `/reports`, and `/teacher/analytics` screens use real backend contracts with explicit empty states. Stage 3–5 migrations and Stage 4 functions remain source until deployed; the Stage 5 migration has not been applied remotely. See [docs/learning-progress.md](docs/learning-progress.md) for the `mastery-v1` formula and APIs, and [docs/ai-learning-services.md](docs/ai-learning-services.md) for AI service details.
 
 The seven-question Quadratic Equations diagnostic is explicitly labeled `development_fixture`; it is sample educational content, not an official exam and not learner-performance data. It covers factorisation, roots, discriminant/nature of roots, structured numeric/text responses, and a contextual problem.
 
@@ -18,7 +18,7 @@ The Stage 2 migration was applied to the configured EduDrishti Supabase project 
 - Answer keys and post-submit explanations/misconception tags are stored separately and withheld until the student's attempt is graded.
 - Service-role and Gemini credentials remain server-side only.
 
-See [docs/architecture.md](docs/architecture.md), [docs/assessment-engine.md](docs/assessment-engine.md), [docs/ai-learning-services.md](docs/ai-learning-services.md), [docs/ui-deployment.md](docs/ui-deployment.md), and [supabase/README.md](supabase/README.md) for architecture, API contracts, Vercel setup, and migration workflow.
+See [docs/architecture.md](docs/architecture.md), [docs/assessment-engine.md](docs/assessment-engine.md), [docs/ai-learning-services.md](docs/ai-learning-services.md), [docs/learning-progress.md](docs/learning-progress.md), [docs/ui-deployment.md](docs/ui-deployment.md), and [supabase/README.md](supabase/README.md) for architecture, API contracts, Vercel setup, and migration workflow.
 
 ## Validation
 
@@ -29,7 +29,9 @@ node --experimental-strip-types --test supabase/functions/_shared/*.test.ts
 python3 -m unittest discover -s tests -v
 ```
 
-The Stage 4 local run passed 16 deterministic Node tests for handler flows, output validation, math consistency, target-operation/difficulty enforcement, answer-key withholding, and Supabase API-key headers, plus all 33 Python tests. The Python checks are static contracts and do not execute PostgreSQL. The existing pgTAP suite and new Stage 4 database permission tests were not run because the Supabase CLI and `psql` are unavailable on this computer (Docker is installed). No Gemini key was available, so live-provider behavior remains unverified. The Stage 4 migration and Edge Functions have not been deployed remotely.
+The earlier Stage 4 validation passed 16 deterministic Node tests and 33 Python tests; those Python tests are static contracts and do not execute PostgreSQL. No Gemini key was available, so live-provider behavior remains unverified. Stage 4 migrations and functions remain undeployed.
+
+For Stage 5, all 44 Python repository tests passed. The frontend passed TypeScript (`pnpm typecheck`), all 9 Vitest tests, and the production build. `git diff --check` passed. The new pgTAP suite contains 40 assertions, but it was not executed because the Supabase CLI and `psql` are unavailable on this computer; no Stage 5 migration was applied remotely.
 
 Frontend validation from `web/`:
 
@@ -39,7 +41,7 @@ pnpm test
 pnpm build
 ```
 
-For this UI change, TypeScript passed, all 9 web tests passed, the Vercel production build completed without bundle-size warnings, and the local HTTP smoke check returned the 23-route manifest plus the SPA shell for assessment and teacher deep links. No remote Supabase calls or Vercel deployment were made.
+For Stage 5, TypeScript, all 9 web tests, and the Vercel production build passed. The existing route-manifest/SPA smoke check had previously returned all 23 routes. No remote Supabase calls or Vercel deployment were made.
 
 ## Repository layout
 
@@ -57,7 +59,8 @@ supabase/
 │   ├── 20261028061647_stage1_database_auth_rls.sql
 │   ├── 20261028064819_stage2_diagnostic_assessment_engine.sql
 │   ├── 20261028093000_stage3_misconception_engine.sql
-│   └── 20261029222500_stage4_ai_learning_services.sql
+│   ├── 20261029222500_stage4_ai_learning_services.sql
+│   └── 20261030223000_stage5_learning_progress.sql
 ├── functions/
 │   ├── personalized-explanation/
 │   ├── targeted-practice/
@@ -65,12 +68,14 @@ supabase/
 └── tests/
     ├── rls.test.sql
     ├── diagnosis_engine.test.sql
-    └── ai_learning_services.test.sql
+    ├── ai_learning_services.test.sql
+    └── learning_progress.test.sql
 
 docs/
 ├── architecture.md
 ├── assessment-engine.md
 ├── ai-learning-services.md
+├── learning-progress.md
 ├── ui-deployment.md
 └── development.md
 
@@ -78,5 +83,6 @@ tests/
 ├── test_ai_services_contract.py
 ├── test_assessment_contract.py
 ├── test_database_migration.py
+├── test_learning_progress_contract.py
 └── test_foundation.py
 ```

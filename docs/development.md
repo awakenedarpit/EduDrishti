@@ -42,6 +42,12 @@ Stage 4 source is in `supabase/migrations/20261029222500_stage4_ai_learning_serv
 
 Run deterministic validation and mocked-handler/backend checks with `node --experimental-strip-types --test supabase/functions/_shared/*.test.ts`, static contracts with `python3 -m unittest discover -s tests -v`, and database permissions with `supabase test db` against a local stack. For a real Edge Function runtime, start the local stack and serve the functions with `supabase functions serve personalized-explanation targeted-practice check-practice-answer --env-file supabase/functions/.env`. No live Gemini request is considered verified until a test environment has a valid server-side key.
 
+## Stage 5 learning progress
+
+Stage 5 source is in `supabase/migrations/20261030223000_stage5_learning_progress.sql`. Run its database tests with `supabase test db`; the transaction-scoped suite is `supabase/tests/learning_progress.test.sql`. Run the Python static contracts with `python3 -m unittest discover -s tests -v`, and the frontend checks from `web/` with `pnpm typecheck`, `pnpm test`, and `pnpm build`. These checks are independent: static/frontend checks do not establish PostgreSQL execution or RLS behavior.
+
+The `mastery-v1` calculation, evidence thresholds, student and teacher APIs, history semantics, and empty states are specified in [learning-progress.md](learning-progress.md). Preserve old snapshots and increment the calculation version for any semantic formula change. The Stage 5 migration and `/progress` and `/teacher/analytics` screens are not deployed remotely; do not imply live data until the migration and frontend release are separately verified.
+
 ## Assessment API
 
 See [assessment-engine.md](assessment-engine.md) for JSON input shapes, RPC parameters, SQLSTATE errors, result summary, answer privacy, retry semantics, and scoring rules. Students call `list_available_assessments`, `get_assessment`, `start_assessment`, `save_response`, `complete_assessment`, and `get_student_results` with their Supabase session. The server owns correctness and score calculation. Question explanations and misconception tags are withheld until a student requests their own completed results.

@@ -37,11 +37,6 @@ export const placeholderCatalog: Record<string, PlaceholderCopy> = {
     group: "Student workspace",
     description: "A future place to organize topics, review activities, and study milestones.",
   },
-  "/progress": {
-    title: "Progress & mastery",
-    group: "Student workspace",
-    description: "A future view of dated topic progress and mastery trends based on real learning records.",
-  },
   "/teacher/students": {
     title: "Student insights",
     group: "Teacher workspace",
@@ -51,11 +46,6 @@ export const placeholderCatalog: Record<string, PlaceholderCopy> = {
     title: "Assessment management",
     group: "Teacher workspace",
     description: "Manage assessment content, publish windows, and class assignments.",
-  },
-  "/teacher/analytics": {
-    title: "Analytics & mastery",
-    group: "Teacher workspace",
-    description: "A future class-level view of assessment participation and topic mastery from authorized records.",
   },
   "/teacher/misconceptions": {
     title: "Misconception heatmap",

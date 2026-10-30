@@ -90,6 +90,13 @@ export type Database = {
       get_student_diagnoses: { Args: { p_attempt_id: string }; Returns: Json };
       get_my_recent_diagnoses: { Args: { p_limit?: number }; Returns: Json };
       get_class_misconception_summary: { Args: { p_class_id: string; p_assessment_id?: string | null }; Returns: Json };
+      get_student_progress_overview: { Args: Record<string, never>; Returns: Json };
+      get_student_topic_mastery: { Args: { p_topic_id: string }; Returns: Json };
+      get_student_assessment_history: { Args: { p_limit?: number }; Returns: Json };
+      get_student_recent_learning_activity: { Args: { p_limit?: number }; Returns: Json };
+      get_student_mastery_history: { Args: { p_topic_id: string; p_learning_objective?: string | null; p_limit?: number }; Returns: Json };
+      get_student_progress_comparison: { Args: { p_period_days?: number; p_topic_id?: string | null }; Returns: Json };
+      get_class_learning_progress: { Args: { p_class_id: string; p_topic_id?: string | null }; Returns: Json };
       create_class: {
         Args: { p_name: string; p_grade_level: number; p_subject: string; p_description?: string | null };
         Returns: string;

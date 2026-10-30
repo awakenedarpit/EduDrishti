@@ -20,6 +20,12 @@ The additive Stage 4 migration is `migrations/20261029222500_stage4_ai_learning_
 
 The Stage 4 migration and Edge Functions have not been applied or deployed remotely. Do not deploy them until the exact Supabase project and migration ledger have been reviewed. Configure `GEMINI_API_KEY`, optional `GEMINI_MODEL`, and `AI_ALLOWED_ORIGINS` as Edge Function secrets; never put the Gemini or Supabase service-role/secret key in browser code or source control. The committed `functions/.env.example` contains placeholders only.
 
+## Stage 5 learning progress
+
+The Stage 5 source migration is `migrations/20261030223000_stage5_learning_progress.sql`. It adds dated, versioned student mastery snapshots and student-only overview, topic, assessment-history, recent-activity, mastery-history, and comparable-period RPCs. `get_class_learning_progress` is restricted to the owning teacher and returns topic/objective aggregates without learner identifiers. Snapshots are derived from graded assessment items and completed Stage 4 targeted-practice activities; internal aggregators and direct browser writes remain denied. The baseline is `mastery-v1` and is documented in [../docs/learning-progress.md](../docs/learning-progress.md).
+
+Stage 5 is source only: it has not been applied to the configured remote project. The transactional pgTAP suite is `tests/learning_progress.test.sql`; run it with the full local migration stack using `supabase test db`. Review the linked target and migration ledger before any remote apply.
+
 ## Link and run locally
 
 1. Install the Supabase CLI and Docker Desktop.

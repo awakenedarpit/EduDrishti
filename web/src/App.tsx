@@ -18,6 +18,8 @@ const TeacherClassesPage = lazy(() => import("./features/teacher/TeacherPages").
 const TeacherDashboardPage = lazy(() => import("./features/teacher/TeacherPages").then((module) => ({ default: module.TeacherDashboardPage })));
 const StudentDiagnosisPage = lazy(() => import("./features/diagnosis/DiagnosisPages").then((module) => ({ default: module.StudentDiagnosisPage })));
 const TeacherMisconceptionPage = lazy(() => import("./features/diagnosis/DiagnosisPages").then((module) => ({ default: module.TeacherMisconceptionPage })));
+const ProgressPage = lazy(() => import("./features/progress/ProgressPage").then((module) => ({ default: module.ProgressPage })));
+const TeacherAnalyticsPage = lazy(() => import("./features/progress/TeacherAnalyticsPage").then((module) => ({ default: module.TeacherAnalyticsPage })));
 
 function SetupRequired() {
   const navigate = useNavigate();
@@ -100,12 +102,12 @@ const router = createBrowserRouter([
           { path: "/tutor", element: <PlaceholderRoute path="/tutor" /> },
           { path: "/practice", element: <PlaceholderRoute path="/practice" /> },
           { path: "/study-plan", element: <PlaceholderRoute path="/study-plan" /> },
-          { path: "/progress", element: <PlaceholderRoute path="/progress" /> },
+          { path: "/progress", element: <StudentOnly><ProgressPage /></StudentOnly> },
           { path: "/teacher", element: <TeacherOnly><TeacherDashboardPage /></TeacherOnly> },
           { path: "/teacher/classes", element: <TeacherOnly><TeacherClassesPage /></TeacherOnly> },
           { path: "/teacher/students", element: <PlaceholderRoute path="/teacher/students" teacher /> },
           { path: "/teacher/assessments", element: <PlaceholderRoute path="/teacher/assessments" teacher /> },
-          { path: "/teacher/analytics", element: <PlaceholderRoute path="/teacher/analytics" teacher /> },
+          { path: "/teacher/analytics", element: <TeacherOnly><TeacherAnalyticsPage /></TeacherOnly> },
           { path: "/teacher/misconceptions", element: <TeacherOnly><TeacherMisconceptionPage /></TeacherOnly> },
           { path: "/teacher/practice-allocator", element: <PlaceholderRoute path="/teacher/practice-allocator" teacher /> },
           { path: "/teacher/teaching-insights", element: <PlaceholderRoute path="/teacher/teaching-insights" teacher /> },
