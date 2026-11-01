@@ -1,0 +1,674 @@
+openapi: 3.1.0
+info:
+  title: EduDrishti Supabase API
+  version: 1.0.0
+  description: >-
+    User-session Supabase PostgREST RPC contract. Stage 4 Edge Function routes are
+    source-defined but not deployed in the inspected project; Stage 5 progress
+    routes are source-only and are intentionally not published as live APIs.
+servers:
+  - url: https://{projectRef}.supabase.co
+    variables:
+      projectRef:
+        default: fdwnreumrodynvixoasl
+        description: Project reference; replace with the deployment's project ref.
+security:
+  - SupabasePublishableKey: []
+    SupabaseUserJWT: []
+tags:
+  - name: Student assessments
+  - name: Student diagnoses
+  - name: Teacher classes
+  - name: Teacher analytics
+  - name: Stage 4 source-defined (not deployed)
+paths:
+  /rest/v1/profiles:
+    get:
+      operationId: getCurrentProfile
+      summary: Read the authenticated user's profile; RLS applies to all rows
+      parameters:
+        - { name: select, in: query, required: true, schema: { type: string }, example: user_id,app_role,display_name,is_demo,created_at,updated_at }
+        - { name: user_id, in: query, required: true, description: PostgREST equality filter for the authenticated user UUID., schema: { type: string }, example: eq.00000000-0000-4000-8000-000000000001 }
+        - { name: limit, in: query, schema: { type: integer, maximum: 1 }, example: 1 }
+      responses:
+        '200':
+          description: Zero or one RLS-visible profile row.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/JsonValue' } }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/classes:
+    get:
+      operationId: listVisibleClasses
+      summary: Read RLS-visible classes (teachers see owned classes)
+      parameters:
+        - { name: select, in: query, schema: { type: string }, example: id,name,grade_level,subject,description,created_at }
+        - { name: order, in: query, schema: { type: string }, example: created_at.desc }
+      responses:
+        '200':
+          description: RLS-filtered classes; empty array is valid. Use list_teacher_classes for analytics counts.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/TeacherClassSummary' } }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/assessment_attempts:
+    get:
+      operationId: listOwnAssessmentAttempts
+      summary: Read the signed-in student's own attempt summaries
+      parameters:
+        - { name: select, in: query, required: true, schema: { type: string }, example: id,assessment_id,attempt_number,status,started_at,submitted_at,score_percent }
+        - { name: id, in: query, description: Optional PostgREST equality filter., schema: { type: string }, example: eq.00000000-0000-4000-8000-000000000301 }
+        - { name: order, in: query, schema: { type: string }, example: started_at.desc }
+      responses:
+        '200':
+          description: RLS-filtered attempt rows; unfinished attempts may have null scores.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/JsonValue' } }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/responses:
+    get:
+      operationId: listOwnAttemptResponses
+      summary: Read response drafts belonging to the signed-in student's own attempt
+      parameters:
+        - { name: select, in: query, required: true, schema: { type: string }, example: question_id,answer,is_answered }
+        - { name: attempt_id, in: query, required: true, description: PostgREST equality filter; RLS still verifies ownership., schema: { type: string }, example: eq.00000000-0000-4000-8000-000000000301 }
+      responses:
+        '200':
+          description: RLS-filtered response rows; answer keys and correctness are not included.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/JsonValue' } }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/list_available_assessments:
+    post:
+      operationId: listAvailableAssessments
+      tags: [Student assessments]
+      summary: List assessments available to the authenticated student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Available published assessments; empty array is valid.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AssessmentSummary' } }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_assessment:
+    post:
+      operationId: getAssessment
+      tags: [Student assessments]
+      summary: Retrieve an available assessment without its answer key or feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_assessment_id]
+              additionalProperties: false
+              properties:
+                p_assessment_id: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: Versioned assessment and ordered questions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssessmentEnvelope' }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/start_assessment:
+    post:
+      operationId: startAssessment
+      tags: [Student assessments]
+      summary: Start or resume the current active attempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_assessment_id]
+              additionalProperties: false
+              properties:
+                p_assessment_id: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: Attempt UUID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Uuid' }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/save_response:
+    post:
+      operationId: saveResponse
+      tags: [Student assessments]
+      summary: Save or replace an answer in the caller's active attempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_attempt_id, p_question_id, p_answer]
+              additionalProperties: false
+              properties:
+                p_attempt_id: { $ref: '#/components/schemas/Uuid' }
+                p_question_id: { $ref: '#/components/schemas/Uuid' }
+                p_answer: { $ref: '#/components/schemas/Answer' }
+      responses:
+        '200':
+          description: Persisted response UUID; correctness is not returned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Uuid' }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/complete_assessment:
+    post:
+      operationId: completeAssessment
+      tags: [Student assessments]
+      summary: Atomically grade the caller's active attempt (idempotent)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_attempt_id]
+              additionalProperties: false
+              properties:
+                p_attempt_id: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: Versioned graded result; unanswered items earn zero.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssessmentResult' }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/submit_assessment:
+    post:
+      operationId: submitAssessmentLegacy
+      deprecated: true
+      tags: [Student assessments]
+      summary: Legacy compatibility alias; use complete_assessment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_attempt_id]
+              additionalProperties: false
+              properties:
+                p_attempt_id: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200': { description: Legacy void-returning completion alias; clients should migrate to complete_assessment. }
+        '204': { description: No response body. }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_student_results:
+    post:
+      operationId: getStudentResults
+      tags: [Student assessments]
+      summary: Retrieve the caller's own graded result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_attempt_id]
+              additionalProperties: false
+              properties:
+                p_attempt_id: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: The same result shape returned by completion.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssessmentResult' }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_student_diagnoses:
+    post:
+      operationId: getStudentDiagnoses
+      tags: [Student diagnoses]
+      summary: Read diagnosis data for the caller's own graded attempt
+      description: Live function name verified in the connected database. Candidate diagnoses are uncertain evidence, not confirmed explanations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_attempt_id]
+              additionalProperties: false
+              properties:
+                p_attempt_id: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: Versioned diagnosis payload.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JsonValue' }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_class_misconception_summary:
+    post:
+      operationId: getClassMisconceptionSummary
+      tags: [Teacher analytics]
+      summary: Get aggregate supported diagnosis counts for a class the caller owns
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_class_id]
+              additionalProperties: false
+              properties:
+                p_class_id: { $ref: '#/components/schemas/Uuid' }
+                p_assessment_id: { anyOf: [{ $ref: '#/components/schemas/Uuid' }, { type: 'null' }] }
+      responses:
+        '200':
+          description: Class aggregate without individual answer content.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JsonValue' }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/create_class:
+    post:
+      operationId: createClass
+      tags: [Teacher classes]
+      summary: Create a class owned by the signed-in teacher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_name, p_grade_level, p_subject]
+              additionalProperties: false
+              properties:
+                p_name: { type: string, minLength: 1, maxLength: 120 }
+                p_grade_level: { type: integer, minimum: 1, maximum: 12 }
+                p_subject: { type: string, minLength: 1, maxLength: 120 }
+                p_description: { anyOf: [{ type: string, maxLength: 2000 }, { type: 'null' }] }
+      responses:
+        '200':
+          description: Created class UUID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Uuid' }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/enroll_student:
+    post:
+      operationId: enrollStudent
+      tags: [Teacher classes]
+      summary: Enroll a student in a class owned by the signed-in teacher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_class_id, p_student_id]
+              additionalProperties: false
+              properties:
+                p_class_id: { $ref: '#/components/schemas/Uuid' }
+                p_student_id: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200': { description: Enrollment accepted; legacy function has no structured response body. }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/list_teacher_classes:
+    post:
+      operationId: listTeacherClasses
+      tags: [Teacher classes]
+      summary: List classes managed by the signed-in teacher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Classes and active enrollment/assessment counts; empty array is valid.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/TeacherClassSummary' } }
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_teacher_class_overview:
+    post:
+      operationId: getTeacherClassOverview
+      tags: [Teacher analytics]
+      summary: Class overview for a class owned by the caller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [p_class_id], additionalProperties: false, properties: { p_class_id: { $ref: '#/components/schemas/Uuid' } } }
+      responses:
+        '200':
+          description: Versioned class, assessment, performance and topic mastery summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_teacher_assessment_analytics:
+    post:
+      operationId: getTeacherAssessmentAnalytics
+      tags: [Teacher analytics]
+      summary: Assessment analytics within a class owned by the caller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [p_class_id, p_assessment_id], additionalProperties: false, properties: { p_class_id: { $ref: '#/components/schemas/Uuid' }, p_assessment_id: { $ref: '#/components/schemas/Uuid' } } }
+      responses:
+        '200':
+          description: Versioned class/assessment metrics and topic performance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_teacher_misconception_heatmap:
+    post:
+      operationId: getTeacherMisconceptionHeatmap
+      tags: [Teacher analytics]
+      summary: Aggregate candidate diagnosis counts for a class owned by the caller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_class_id]
+              additionalProperties: false
+              properties:
+                p_class_id: { $ref: '#/components/schemas/Uuid' }
+                p_assessment_id: { anyOf: [{ $ref: '#/components/schemas/Uuid' }, { type: 'null' }] }
+                p_topic_id: { anyOf: [{ $ref: '#/components/schemas/Uuid' }, { type: 'null' }] }
+      responses:
+        '200':
+          description: Counts/rates of uncertain candidate records; not confirmed prevalence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_teacher_students_needing_support:
+    post:
+      operationId: getTeacherStudentsNeedingSupport
+      tags: [Teacher analytics]
+      summary: Return supportive review signals and insufficient-evidence group for a class the caller owns
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [p_class_id], additionalProperties: false, properties: { p_class_id: { $ref: '#/components/schemas/Uuid' } } }
+      responses:
+        '200':
+          description: Evidence-linked support/review signals; no personal-trait inference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_teacher_student_learning_detail:
+    post:
+      operationId: getTeacherStudentLearningDetail
+      tags: [Teacher analytics]
+      summary: Student learning detail for a student enrolled in a class owned by the caller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [p_class_id, p_student_id], additionalProperties: false, properties: { p_class_id: { $ref: '#/components/schemas/Uuid' }, p_student_id: { $ref: '#/components/schemas/Uuid' } } }
+      responses:
+        '200':
+          description: Authorized detail; omits raw submitted answer JSON and answer keys.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_teacher_teaching_recommendations:
+    post:
+      operationId: getTeacherTeachingRecommendations
+      tags: [Teacher analytics]
+      summary: Evidence-linked class teaching recommendations for a class the caller owns
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [p_class_id], additionalProperties: false, properties: { p_class_id: { $ref: '#/components/schemas/Uuid' } } }
+      responses:
+        '200':
+          description: Recommendations cite actual class-level evidence; no generated or invented data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /rest/v1/rpc/get_teacher_assessment_report_data:
+    post:
+      operationId: getTeacherAssessmentReportData
+      tags: [Teacher analytics]
+      summary: Export-safe aggregate report data for a class and assessment owned by the caller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [p_class_id, p_assessment_id], additionalProperties: false, properties: { p_class_id: { $ref: '#/components/schemas/Uuid' }, p_assessment_id: { $ref: '#/components/schemas/Uuid' } } }
+      responses:
+        '200':
+          description: Aggregates only; no student IDs, submitted answers or answer keys.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        default: { $ref: '#/components/responses/PostgrestError' }
+  /functions/v1/personalized-explanation:
+    post:
+      operationId: personalizedExplanation
+      tags: [Stage 4 source-defined (not deployed)]
+      summary: Generate a student-scoped explanation for an answered item
+      x-deployment-status: source-defined-not-deployed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonalizedExplanationRequest' }
+      responses:
+        '200':
+          description: Validated explanation activity.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JsonValue' }
+        '400': { $ref: '#/components/responses/EdgeError' }
+        '401': { $ref: '#/components/responses/EdgeError' }
+        '403': { $ref: '#/components/responses/EdgeError' }
+        '404': { $ref: '#/components/responses/EdgeError' }
+        '409': { $ref: '#/components/responses/EdgeError' }
+        '429': { $ref: '#/components/responses/EdgeError' }
+        '503': { $ref: '#/components/responses/EdgeError' }
+  /functions/v1/targeted-practice:
+    post:
+      operationId: targetedPractice
+      tags: [Stage 4 source-defined (not deployed)]
+      summary: Generate targeted practice for a supported answered assessment item
+      x-deployment-status: source-defined-not-deployed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TargetedPracticeRequest' }
+      responses:
+        '200':
+          description: Practice items without answer keys.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400': { $ref: '#/components/responses/EdgeError' }
+        '401': { $ref: '#/components/responses/EdgeError' }
+        '403': { $ref: '#/components/responses/EdgeError' }
+        '404': { $ref: '#/components/responses/EdgeError' }
+        '409': { $ref: '#/components/responses/EdgeError' }
+        '429': { $ref: '#/components/responses/EdgeError' }
+        '503': { $ref: '#/components/responses/EdgeError' }
+  /functions/v1/check-practice-answer:
+    post:
+      operationId: checkPracticeAnswer
+      tags: [Stage 4 source-defined (not deployed)]
+      summary: Check an answer to a stored generated practice item
+      x-deployment-status: source-defined-not-deployed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckPracticeAnswerRequest' }
+      responses:
+        '200':
+          description: Checked answer with feedback and correct option after the learner has answered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonValue'
+        '400': { $ref: '#/components/responses/EdgeError' }
+        '401': { $ref: '#/components/responses/EdgeError' }
+        '403': { $ref: '#/components/responses/EdgeError' }
+        '404': { $ref: '#/components/responses/EdgeError' }
+        '409': { $ref: '#/components/responses/EdgeError' }
+        '429': { $ref: '#/components/responses/EdgeError' }
+        '503': { $ref: '#/components/responses/EdgeError' }
+components:
+  securitySchemes:
+    SupabasePublishableKey:
+      type: apiKey
+      in: header
+      name: apikey
+      description: Public project publishable/legacy anon key; not an authorization substitute.
+    SupabaseUserJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase Auth access token for the signed-in user; never service role.
+  responses:
+    PostgrestError:
+      description: Standard PostgREST database error; keep code, do not display details/hint.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PostgrestError' }
+    EdgeError:
+      description: Standard source-defined Edge Function error envelope.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/EdgeError' }
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+    JsonValue: {}
+    PostgrestError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, description: SQLSTATE or PostgREST error code. }
+        message: { type: string }
+        details: { type: [string, 'null'] }
+        hint: { type: [string, 'null'] }
+    EdgeError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    AssessmentSummary:
+      type: object
+      properties:
+        assessment_id: { $ref: '#/components/schemas/Uuid' }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        assessment_type: { type: string, enum: [diagnostic, practice, summative] }
+        class_id: { anyOf: [{ $ref: '#/components/schemas/Uuid' }, { type: 'null' }] }
+        is_template: { type: boolean }
+        question_count: { type: integer }
+        total_points: { type: number }
+        opens_at: { type: [string, 'null'], format: date-time }
+        closes_at: { type: [string, 'null'], format: date-time }
+    AssessmentEnvelope:
+      type: object
+      required: [schema_version, assessment, questions]
+      properties:
+        schema_version: { type: integer, const: 1 }
+        assessment: { type: object, additionalProperties: true }
+        questions: { type: array, items: { type: object, additionalProperties: true } }
+    AssessmentResult:
+      type: object
+      required: [schema_version, attempt, summary, items]
+      properties:
+        schema_version: { type: integer, const: 1 }
+        attempt: { type: object, additionalProperties: true }
+        summary: { type: object, additionalProperties: true }
+        items: { type: array, items: { type: object, additionalProperties: true } }
+    Answer:
+      oneOf:
+        - type: object
+          required: [selected_option]
+          additionalProperties: false
+          properties: { selected_option: { type: string } }
+        - type: object
+          required: [selected_options]
+          additionalProperties: false
+          properties: { selected_options: { type: array, items: { type: string }, uniqueItems: true } }
+        - type: object
+          required: [value]
+          additionalProperties: false
+          properties: { value: { type: number } }
+        - type: object
+          required: [value]
+          additionalProperties: false
+          properties: { value: { type: string } }
+    TeacherClassSummary:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        name: { type: string }
+        grade_level: { type: integer }
+        subject: { type: string }
+        description: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        active_enrollment_count: { type: integer }
+        assessment_count: { type: integer }
+    PersonalizedExplanationRequest:
+      type: object
+      required: [attempt_id, question_id]
+      additionalProperties: false
+      properties:
+        attempt_id: { $ref: '#/components/schemas/Uuid' }
+        question_id: { $ref: '#/components/schemas/Uuid' }
+    TargetedPracticeRequest:
+      allOf:
+        - $ref: '#/components/schemas/PersonalizedExplanationRequest'
+        - type: object
+          properties:
+            count: { type: integer, minimum: 1, maximum: 3, default: 2 }
+    CheckPracticeAnswerRequest:
+      type: object
+      required: [activity_id, item_id, answer]
+      additionalProperties: false
+      properties:
+        activity_id: { $ref: '#/components/schemas/Uuid' }
+        item_id: { $ref: '#/components/schemas/Uuid' }
+        answer:
+          type: object
+          required: [selected_option]
+          additionalProperties: false
+          properties: { selected_option: { type: string } }
