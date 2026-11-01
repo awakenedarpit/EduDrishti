@@ -106,7 +106,7 @@ BEGIN
           AND response.question_id = p_question_id
           AND response.is_answered
     ) THEN
-        RAISE EXCEPTION 'Question is not an answered item in this student's graded attempt' USING ERRCODE = '42501';
+        RAISE EXCEPTION 'Question is not an answered item in this student''s graded attempt' USING ERRCODE = '42501';
     END IF;
 
     SELECT pg_catalog.jsonb_build_object(
@@ -167,14 +167,15 @@ BEGIN
           AND response.question_id = p_question_id
           AND response.is_answered
     ) THEN
-        RAISE EXCEPTION 'Activity must belong to an answered item in the student's graded attempt' USING ERRCODE = '42501';
+        RAISE EXCEPTION 'Activity must belong to an answered item in the student''s graded attempt' USING ERRCODE = '42501';
     END IF;
-    IF p_activity_type = 'practice' AND CASE
-        WHEN pg_catalog.jsonb_typeof(p_content->'items') = 'array'
-            THEN pg_catalog.jsonb_array_length(p_content->'items') NOT BETWEEN 1 AND 3
-        ELSE true
-    END THEN
-        RAISE EXCEPTION 'Practice content must contain one to three items' USING ERRCODE = '22023';
+    IF p_activity_type = 'practice' THEN
+        IF pg_catalog.jsonb_typeof(p_content->'items') IS DISTINCT FROM 'array' THEN
+            RAISE EXCEPTION 'Practice content must contain one to three items' USING ERRCODE = '22023';
+        END IF;
+        IF pg_catalog.jsonb_array_length(p_content->'items') NOT BETWEEN 1 AND 3 THEN
+            RAISE EXCEPTION 'Practice content must contain one to three items' USING ERRCODE = '22023';
+        END IF;
     END IF;
 
     INSERT INTO private.ai_learning_activities (
@@ -242,12 +243,11 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Practice activity is unavailable' USING ERRCODE = '42501';
     END IF;
-    IF CASE
-        WHEN pg_catalog.jsonb_typeof(p_submitted_answer) = 'object' THEN
-            (SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(p_submitted_answer)) <> 1
-            OR pg_catalog.jsonb_typeof(p_submitted_answer->'selected_option') IS DISTINCT FROM 'string'
-        ELSE true
-    END THEN
+    IF pg_catalog.jsonb_typeof(p_submitted_answer) IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'Practice answer shape is invalid' USING ERRCODE = '22023';
+    END IF;
+    IF (SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(p_submitted_answer)) <> 1
+       OR pg_catalog.jsonb_typeof(p_submitted_answer->'selected_option') IS DISTINCT FROM 'string' THEN
         RAISE EXCEPTION 'Practice answer shape is invalid' USING ERRCODE = '22023';
     END IF;
 
